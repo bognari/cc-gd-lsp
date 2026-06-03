@@ -1,0 +1,28 @@
+{
+  "name": "cc-gd-lsp",
+  "owner": {
+    "name": "Stephan Mielke"
+  },
+  "metadata": {
+    "description": "Claude Code marketplace hosting the gdscript-lsp plugin (Godot GDScript LSP bridge).",
+    "version": "0.1.0"
+  },
+  "plugins": [
+    {
+      "name": "gdscript-lsp",
+      "source": "./",
+      "description": "GDScript language server for Claude Code (auto-launches Godot headless).",
+      "version": "0.1.0",
+      "category": "language-servers",
+      "tags": ["lsp", "godot", "gdscript", "gdshader"],
+      "keywords": [
+        "godot",
+        "gdscript",
+        "gdshader",
+        "lsp",
+        "language-server",
+        "game-development"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,48 @@
+# ---- Claude Code -----------------------------------------------------------
+# User-local plugin permissions; not part of the published plugin.
+.claude/settings.local.json
+
+# ---- Editor / IDE ----------------------------------------------------------
+.vscode/
+.idea/
+*.iml
+*.swp
+*.swo
+*~
+
+# ---- OS --------------------------------------------------------------------
+.DS_Store
+.AppleDouble
+.LSOverride
+Thumbs.db
+desktop.ini
+
+# ---- Node ------------------------------------------------------------------
+# The bridge ships as a single zero-dependency script today, but keep these
+# in case dev tooling (linters, tests) is added later.
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+.pnp.*
+.yarn/cache
+.yarn/install-state.gz
+
+# ---- Logs / runtime --------------------------------------------------------
+*.log
+logs/
+
+# ---- Local dev notes -------------------------------------------------------
+# Research scratchpad used while building the plugin; not part of the release.
+other_lsp.txt
+
+# ---- Environment / secrets -------------------------------------------------
+.env
+.env.local
+.env.*.local
+
+# ---- Misc ------------------------------------------------------------------
+*.bak
+*.tmp
+*.orig

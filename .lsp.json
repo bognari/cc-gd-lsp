@@ -1,0 +1,15 @@
+{
+  "gdscript": {
+    "command": "node",
+    "args": ["${CLAUDE_PLUGIN_ROOT}/bin/godot-lsp-bridge.js"],
+    "extensionToLanguage": {
+      ".gd": "gdscript",
+      ".gdshader": "gdshader",
+      ".gdshaderinc": "gdshader"
+    },
+    "transport": "stdio",
+    "startupTimeout": 45000,
+    "shutdownTimeout": 5000,
+    "maxRestarts": 3
+  }
+}
