@@ -16,7 +16,10 @@ function findProjectRoot(startDir) {
 
 function resToAbs(root, resPath) {
   if (!root || typeof resPath !== 'string' || !resPath.startsWith('res://')) return null;
-  return path.join(root, resPath.slice('res://'.length));
+  const abs = path.resolve(root, resPath.slice('res://'.length));
+  const rel = path.relative(root, abs);
+  if (rel.startsWith('..') || path.isAbsolute(rel)) return null; // escapes the project root
+  return abs;
 }
 
 // Levenshtein distance, small inputs only.
@@ -86,14 +89,15 @@ function createProject(root) {
     },
     findSimilarFiles(resPath, max) {
       if (!root || typeof resPath !== 'string') return [];
-      const targetBase = resPath.split('/').pop();
-      const scored = files()
-        .map((f) => ({ f, d: distance(targetBase, f.split('/').pop()) }))
+      const targetBase = resPath.split('/').pop().toLowerCase();
+      if (!targetBase) return [];
+      const threshold = Math.max(2, Math.floor(targetBase.length / 3));
+      return files()
+        .map((f) => ({ f, d: distance(targetBase, f.split('/').pop().toLowerCase()) }))
+        .filter((x) => x.d <= threshold)
         .sort((a, b) => a.d - b.d)
-        .filter((x) => x.d <= Math.max(2, Math.floor(targetBase.length / 3)))
         .slice(0, max)
         .map((x) => x.f);
-      return scored;
     },
   };
 }
