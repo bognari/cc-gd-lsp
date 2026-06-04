@@ -29,7 +29,7 @@ function startServer(input, output, options = {}) {
   const documents = new Map(); // uri -> { text, version }
   let workspaceRoot = null;
   let shutdownReceived = false;
-  const projectCacheMax = options.projectCacheMax ?? 8;
+  const projectCacheMax = Math.max(1, options.projectCacheMax ?? 8);
   const projectCache = new Map(); // insertion order doubles as LRU order
   const staticDiagnostics = new Map();  // uri -> Diagnostic[]
   const deepDiagnostics = new Map();    // uri -> Diagnostic[]
@@ -121,16 +121,20 @@ function startServer(input, output, options = {}) {
     if (st.running) { st.pending = true; return; }
     st.running = true;
     st.pending = false;
-    runDeepCheck(root, { godotPath: st.godot })
+    const controller = new AbortController();
+    st.controller = controller;
+    runDeepCheck(root, { godotPath: st.godot, signal: controller.signal })
       .then((map) => applyDeepResults(root, map))
       .catch((err) => process.stderr.write(`[godot-resource] deep-check error: ${err && err.stack}\n`))
       .finally(() => {
         st.running = false;
+        st.controller = null;
         if (st.pending) startDeepRun(root);
       });
   }
 
   function applyDeepResults(root, map) {
+    if (shutdownReceived) return;
     const prevUris = new Set([...deepDiagnostics.keys()].filter((u) => uriUnderRoot(u, root)));
     for (const uri of prevUris) deepDiagnostics.delete(uri);
     for (const [uri, diags] of map) deepDiagnostics.set(uri, diags);
@@ -205,7 +209,10 @@ function startServer(input, output, options = {}) {
         }
         case 'shutdown':
           shutdownReceived = true;
-          for (const st of deepState.values()) { if (st.timer) { clearTimeout(st.timer); st.timer = null; } }
+          for (const st of deepState.values()) {
+            if (st.timer) { clearTimeout(st.timer); st.timer = null; }
+            if (st.controller) { try { st.controller.abort(); } catch {} }
+          }
           conn.send({ jsonrpc: '2.0', id: msg.id, result: null });
           return;
         case 'exit':

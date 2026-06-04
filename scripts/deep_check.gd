@@ -24,7 +24,7 @@ func _scan(dir_path: String) -> Array:
 	d.list_dir_begin()
 	var n := d.get_next()
 	while n != "":
-		if n == ".godot" or n == ".import" or n.begins_with("."):
+		if n == ".godot" or n == ".import" or n == "node_modules" or n.begins_with("."):
 			n = d.get_next()
 			continue
 		var full := dir_path.path_join(n)

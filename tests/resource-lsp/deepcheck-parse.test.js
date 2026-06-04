@@ -54,3 +54,16 @@ test('strips ANSI color codes before parsing', () => {
   assert.ok(d && d.length === 1, 'ANSI-wrapped line must still parse');
   assert.equal(d[0].code, 'deep-missing-dep');
 });
+
+test('a GDRESLSP_LOADFAIL marker becomes a file-level deep-load-failed diagnostic', () => {
+  const map = parseGodotOutput('GDRESLSP_LOADFAIL\tres://broken.tres\n', '/proj');
+  const d = map.get('file:///proj/broken.tres');
+  assert.ok(d && d.length === 1);
+  assert.equal(d[0].code, 'deep-load-failed');
+  assert.equal(d[0].range.start.line, 0);
+});
+
+test('an error line whose res:// path escapes the project root is ignored', () => {
+  const map = parseGodotOutput('ERROR: res://../../etc/passwd:1 - boom\n', '/proj');
+  assert.equal(map.size, 0);
+});

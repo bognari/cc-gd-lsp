@@ -19,6 +19,12 @@ const ANSI_RE = /\x1b\[[0-9;]*m/g;
 // Fix 1: per-call monotonic counter so concurrent runDeepCheck calls never share a temp filename
 let runCounter = 0;
 
+// Fix 4: best-effort temp-file cleanup on abrupt process exit
+const activeTempFiles = new Set();
+process.on('exit', () => {
+  for (const f of activeTempFiles) { try { fs.rmSync(f, { force: true }); } catch {} }
+});
+
 // Fix 3: classify uses the error KIND for SCRIPT ERROR first, then message content
 function classify(message, kind) {
   if (kind === 'SCRIPT ERROR') return 'deep-script-error';
@@ -31,18 +37,40 @@ function classify(message, kind) {
 
 function resToUri(resPath, root) {
   const rel = resPath.slice('res://'.length);
-  return pathToFileURL(path.join(root, rel)).href;
+  const abs = path.resolve(root, rel);
+  const relCheck = path.relative(root, abs);
+  if (relCheck.startsWith('..') || path.isAbsolute(relCheck)) return null; // escapes project root
+  return pathToFileURL(abs).href;
 }
 
 function parseGodotOutput(text, root) {
   const byUri = new Map();
   const seen = new Set();
   for (const raw of text.split(/\r?\n/)) {
+    // Fix 2 (new): consume GDRESLSP_LOADFAIL markers as file-level diagnostics
+    const lf = /^GDRESLSP_LOADFAIL\t(res:\/\/\S+)$/.exec(raw.trim());
+    if (lf) {
+      const uri = resToUri(lf[1], root);
+      if (uri) {
+        const dedupKey = `${uri}|0|loadfail`;
+        if (!seen.has(dedupKey)) {
+          seen.add(dedupKey);
+          if (!byUri.has(uri)) byUri.set(uri, []);
+          byUri.get(uri).push({
+            range: { start: { line: 0, character: 0 }, end: { line: 0, character: 200 } },
+            severity: 1, code: 'deep-load-failed', source: SOURCE,
+            message: 'Resource failed to load (see Godot output for details).',
+          });
+        }
+      }
+      continue;
+    }
     // Fix 2: strip ANSI before matching so ^-anchored LINE_RE works in CI
     const m = LINE_RE.exec(raw.trim().replace(ANSI_RE, ''));
     if (!m) continue;
     const [, kind, resPath, lineStr, message] = m;
     const uri = resToUri(resPath, root);
+    if (!uri) continue; // Fix 3: path escapes project root — skip
     const line = Math.max(0, Number.parseInt(lineStr, 10) - 1);
     const severity = kind === 'WARNING' ? 2 : 1;
     const dedupKey = `${uri}|${line}|${message}`;
@@ -79,6 +107,7 @@ function runDeepCheck(root, opts = {}) {
     const dest = path.join(root, baseName);
     try {
       fs.copyFileSync(src, dest);
+      activeTempFiles.add(dest); // Fix 4: track for exit-time cleanup
     } catch {
       // Fix 6: surface staging failure so caller knows this path was hit
       process.stderr.write('[godot-resource] deep-check: failed to stage tool-script (scripts/deep_check.gd missing?)\n');
@@ -120,6 +149,7 @@ function runDeepCheck(root, opts = {}) {
       // Fix 7: remove the abort listener to prevent a leak on a long-lived signal
       if (opts.signal && abortHandler) opts.signal.removeEventListener('abort', abortHandler);
       try { fs.rmSync(dest, { force: true }); } catch {}
+      activeTempFiles.delete(dest); // Fix 4: remove from exit-time registry after clean removal
       resolve(parseGodotOutput(buf, root));
     };
     child.on('close', finish);

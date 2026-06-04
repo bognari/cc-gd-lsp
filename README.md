@@ -77,8 +77,9 @@ each mapped to `res://file:line`:
 
 - a `sub_resource` of an unknown/uninstantiable type,
 - a missing dependency (with Godot's own fidelity),
-- a referenced script that fails to parse/load,
-- any other resource that fails to load.
+- any resource that fails to load.
+
+(GDScript parse errors are reported separately by the GDScript language server.)
 
 Behavior:
 
@@ -89,6 +90,12 @@ Behavior:
 - It needs the project's `.godot/` import cache (open the project in Godot
   once first).
 - Disable it with `--no-deep-check` in the `godot-resource` args.
+- If you install Godot after starting Claude Code, restart the session so the
+  deep-check can pick it up.
+
+> **Warning:** `ResourceLoader.load()` executes any attached `@tool` script's
+> `_init`. If your project has tool scripts with side effects (file writes,
+> network calls), use `--no-deep-check`.
 
 **Scope:** the deep-check is *load-only*. It does **not** validate property
 *types* (Godot silently coerces those) and does **not** flag unknown node

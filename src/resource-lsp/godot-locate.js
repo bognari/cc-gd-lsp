@@ -14,7 +14,7 @@ function fileExists(p) {
 
 function lookupOnPath(name) {
   const cmd = isWindows ? 'where' : 'which';
-  const res = spawnSync(cmd, [name], { encoding: 'utf8', timeout: 3000 });
+  const res = spawnSync(cmd, [name], { encoding: 'utf8', timeout: 1500 });
   if (res.status !== 0 || !res.stdout) return null;
   const first = res.stdout.trim().split(/\r?\n/)[0];
   return first || null;
@@ -33,7 +33,9 @@ function locateGodot(explicit) {
   if (isWindows) {
     candidates.push(
       String.raw`C:\Program Files\Godot\godot.exe`,
+      String.raw`C:\Program Files (x86)\Godot\godot.exe`,
       String.raw`C:\Program Files\Godot_mono\Godot.exe`,
+      String.raw`C:\Program Files (x86)\Godot_mono\Godot.exe`,
     );
   } else if (platform === 'darwin') {
     const home = os.homedir();
