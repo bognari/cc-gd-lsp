@@ -40,6 +40,32 @@ static parser.
 
 Supported file types: `.gd`, `.gdshader`, `.gdshaderinc`.
 
+## Resource & scene validation (.tscn / .tres)
+
+In addition to the GDScript language server, this plugin ships a second,
+zero-dependency language server that statically validates Godot text scenes
+(`.tscn`) and resources (`.tres`). It needs no running Godot instance.
+
+It reports, with fix suggestions where possible:
+
+| Check | Severity | Fix offered |
+|---|---|---|
+| Referenced `ext_resource` file does not exist on disk | Error | "Did you mean res://…?" |
+| `ExtResource("id")` / `SubResource("id")` id not declared in the file | Error | Nearest declared id |
+| Missing required tag attributes (`path`/`type`/`id`, connection fields, …) | Error | — |
+| `[resource]` in a `.tscn` / `[node]` in a `.tres` | Error | — |
+| `format` newer than this Godot supports | Error | — |
+| Invalid `uid://…` | Warning | Remove the uid attribute |
+| Duplicate `ext_resource` / `sub_resource` id | Warning | Renumber |
+| `load_steps` does not match the resource count | Info | Correct the number |
+
+**Accuracy:** the validator mirrors the structural rules of Godot's own text
+parser (`resource_format_text.cpp`), so it does not produce false positives on
+valid files. Property/type-level validation (which Godot only performs at scene
+instantiation) is **not** done statically — that is planned as an optional
+Godot-backed deep-check in a future version. Binary `.scn`/`.res` files and
+`project.godot` are out of scope.
+
 ## Quickstart
 
 ### Install from a local clone
