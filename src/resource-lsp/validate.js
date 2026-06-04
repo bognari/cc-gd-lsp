@@ -33,16 +33,16 @@ function validate(doc, project) {
   }
 
   for (const s of doc.sections) {
+    if (s.attributes.uid !== undefined && !UID_RE.test(s.attributes.uid)) {
+      diags.push(mk(attrRange(s, 'uid'), SEVERITY.WARNING, 'invalid-uid',
+        `Invalid UID '${s.attributes.uid}'. Godot only generates UIDs using [a-y0-8]; this one will not resolve and Godot falls back to the path.`));
+    }
     if (s.name === 'ext_resource') {
       for (const req of ['type', 'path', 'id']) {
         if (s.attributes[req] === undefined) {
           diags.push(mk(s.headerRange, SEVERITY.ERROR, 'ext-missing-attr',
             `Missing required '${req}' attribute in 'ext_resource' tag.`));
         }
-      }
-      if (s.attributes.uid !== undefined && !UID_RE.test(s.attributes.uid)) {
-        diags.push(mk(attrRange(s, 'uid'), SEVERITY.WARNING, 'invalid-uid',
-          `Invalid UID '${s.attributes.uid}'. Godot only generates UIDs using [a-y0-8]; this one will not resolve and Godot falls back to the path.`));
       }
     } else if (s.name === 'sub_resource') {
       for (const req of ['type', 'id']) {
