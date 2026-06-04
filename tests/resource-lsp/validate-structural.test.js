@@ -1,0 +1,75 @@
+const test = require('node:test');
+const assert = require('node:assert/strict');
+const { tokenize } = require('../../src/resource-lsp/tokenizer.js');
+const { buildDocument } = require('../../src/resource-lsp/document.js');
+const { validate } = require('../../src/resource-lsp/validate.js');
+
+const ALL_OK_PROJECT = {
+  root: '/x',
+  fileExists: () => true,
+  findSimilarFiles: () => [],
+};
+
+function diag(src) {
+  return validate(buildDocument(tokenize(src)), ALL_OK_PROJECT);
+}
+function codes(src) {
+  return diag(src).map((d) => d.code).sort();
+}
+
+test('flags unknown root tag', () => {
+  assert.ok(codes('[banana]\n').includes('unknown-root-tag'));
+});
+
+test('flags gd_resource without type', () => {
+  assert.ok(codes('[gd_resource format=3]\n\n[resource]\n').includes('resource-missing-type'));
+});
+
+test('flags ext_resource missing required attrs', () => {
+  const c = codes('[gd_scene format=3]\n\n[ext_resource type="Script"]\n');
+  assert.ok(c.includes('ext-missing-attr'));
+});
+
+test('flags sub_resource missing id', () => {
+  const c = codes('[gd_scene format=3]\n\n[sub_resource type="CircleShape2D"]\n');
+  assert.ok(c.includes('sub-missing-attr'));
+});
+
+test('flags connection missing fields', () => {
+  const src = '[gd_scene format=3]\n\n[node name="A" type="Node"]\n\n[connection signal="x" from="A" to="B"]\n';
+  assert.ok(codes(src).includes('connection-missing-attr'));
+});
+
+test('flags [resource] tag in a scene', () => {
+  assert.ok(codes('[gd_scene format=3]\n\n[resource]\n').includes('resource-tag-in-scene'));
+});
+
+test('flags [node] tag in a resource', () => {
+  assert.ok(codes('[gd_resource type="Theme" format=3]\n\n[node name="A" type="Node"]\n').includes('node-tag-in-resource'));
+});
+
+test('flags format newer than 4', () => {
+  assert.ok(codes('[gd_scene format=5]\n').includes('format-too-new'));
+});
+
+test('flags invalid uid as a warning', () => {
+  const d = diag('[gd_scene format=3]\n\n[ext_resource type="Script" path="res://a.gd" uid="uid://zzz9" id="1"]\n');
+  const uid = d.find((x) => x.code === 'invalid-uid');
+  assert.ok(uid);
+  assert.equal(uid.severity, 2);
+});
+
+test('flags duplicate ext id as warning', () => {
+  const src = '[gd_scene format=3]\n\n[ext_resource type="Script" path="res://a.gd" id="1"]\n[ext_resource type="Script" path="res://b.gd" id="1"]\n';
+  const d = diag(src);
+  const dup = d.find((x) => x.code === 'duplicate-ext-id');
+  assert.ok(dup);
+  assert.equal(dup.severity, 2);
+});
+
+test('clean scene yields only the load_steps info diagnostic', () => {
+  const src = '[gd_scene load_steps=2 format=3 uid="uid://abc"]\n\n[ext_resource type="Script" path="res://a.gd" id="1"]\n\n[node name="Root" type="Node"]\nscript = ExtResource("1")\n';
+  const d = diag(src);
+  assert.deepEqual(d.map((x) => x.code), ['load-steps-mismatch']);
+  assert.equal(d[0].severity, 3);
+});
