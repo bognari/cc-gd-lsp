@@ -19,35 +19,41 @@ function lookupOnPath(name) {
   return first || null;
 }
 
+function platformFallbacks() {
+  if (isWindows) {
+    return [
+      String.raw`C:\Program Files\Godot\godot.exe`,
+      String.raw`C:\Program Files (x86)\Godot\godot.exe`,
+      String.raw`C:\Program Files\Godot_mono\Godot.exe`,
+      String.raw`C:\Program Files (x86)\Godot_mono\Godot.exe`,
+    ];
+  }
+  if (platform === 'darwin') {
+    const home = os.homedir();
+    return [
+      '/Applications/Godot.app/Contents/MacOS/Godot',
+      `${home}/Applications/Godot.app/Contents/MacOS/Godot`,
+      '/Applications/Godot_mono.app/Contents/MacOS/Godot',
+      `${home}/Applications/Godot_mono.app/Contents/MacOS/Godot`,
+    ];
+  }
+  return ['/usr/bin/godot', '/usr/local/bin/godot', '/usr/bin/godot-mono', '/usr/local/bin/godot-mono'];
+}
+
 function locateGodot(explicit) {
   if (explicit && fileExists(explicit)) return explicit;
   const fromEnv = process.env.GODOT_PATH;
   if (fromEnv && fileExists(fromEnv)) return fromEnv;
 
-  const candidates = [];
+  // Short-circuit: return on the first name found on PATH (avoids running all
+  // 7 `which`/`where` probes when an earlier name already resolves).
   for (const name of ['godot', 'godot4', 'godot-editor', 'Godot', 'godot-mono', 'godot4-mono', 'Godot_mono']) {
     const found = lookupOnPath(name);
-    if (found) candidates.push(found);
+    if (found) return found;
   }
-  if (isWindows) {
-    candidates.push(
-      String.raw`C:\Program Files\Godot\godot.exe`,
-      String.raw`C:\Program Files (x86)\Godot\godot.exe`,
-      String.raw`C:\Program Files\Godot_mono\Godot.exe`,
-      String.raw`C:\Program Files (x86)\Godot_mono\Godot.exe`,
-    );
-  } else if (platform === 'darwin') {
-    const home = os.homedir();
-    candidates.push(
-      '/Applications/Godot.app/Contents/MacOS/Godot',
-      `${home}/Applications/Godot.app/Contents/MacOS/Godot`,
-      '/Applications/Godot_mono.app/Contents/MacOS/Godot',
-      `${home}/Applications/Godot_mono.app/Contents/MacOS/Godot`,
-    );
-  } else {
-    candidates.push('/usr/bin/godot', '/usr/local/bin/godot', '/usr/bin/godot-mono', '/usr/local/bin/godot-mono');
+  for (const c of platformFallbacks()) {
+    if (fileExists(c)) return c;
   }
-  for (const c of candidates) if (c && fileExists(c)) return c;
   return null;
 }
 

@@ -124,10 +124,12 @@ function runDeepCheck(root, opts = {}) {
     // Fix 5: bounded output buffer — kill and stop accumulating past 10 MB
     const MAX_BUF = 10 * 1024 * 1024; // 10 MB
     let buf = '';
+    let bytes = 0; // track real byte size of received chunks (buf.length counts UTF-16 units)
     const onData = (c) => {
-      if (buf.length >= MAX_BUF) return;
+      if (bytes >= MAX_BUF) return;
+      bytes += c.length; // c is a Buffer here -> byte length
       buf += c.toString('utf8');
-      if (buf.length >= MAX_BUF) { try { child.kill('SIGKILL'); } catch {} }
+      if (bytes >= MAX_BUF) { try { child.kill('SIGKILL'); } catch {} }
     };
     child.stdout.on('data', onData);
     child.stderr.on('data', onData);
