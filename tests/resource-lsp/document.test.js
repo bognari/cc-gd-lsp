@@ -54,3 +54,19 @@ test('classifies a resource document', () => {
   assert.ok(doc.resourceSection);
   assert.equal(doc.nodes.length, 0);
 });
+
+test('reference ranges have correct character offsets, even for keyword-substring ids', () => {
+  const src = '[gd_scene format=3]\n\n[ext_resource type="X" path="res://a.gd" id="Resource"]\n\n[node name="R" type="Node"]\nscript = ExtResource("Resource")\n';
+  const doc = buildDocument(tokenize(src));
+  const ref = doc.references.find((r) => r.kind === 'ext');
+  assert.equal(ref.id, 'Resource');
+  // The body line is: script = ExtResource("Resource")
+  // index of the id text inside the quotes:
+  const line = 'script = ExtResource("Resource")';
+  const expectedStart = line.indexOf('Resource', line.indexOf('('));
+  assert.equal(ref.range.start.line, 5);
+  assert.equal(ref.range.start.character, expectedStart);
+  assert.equal(ref.range.end.character, expectedStart + 'Resource'.length);
+  // And the slice of the source line at that range is exactly the id:
+  assert.equal(line.slice(ref.range.start.character, ref.range.end.character), 'Resource');
+});

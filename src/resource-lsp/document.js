@@ -1,6 +1,6 @@
 'use strict';
 
-const REFERENCE_RE = /\b(ExtResource|SubResource)\(\s*"?([0-9A-Za-z_]+)"?\s*\)/g;
+const REFERENCE_RE = /\b(ExtResource|SubResource)\(\s*"?([0-9A-Za-z_]+)"?\s*\)/gd;
 
 function buildDocument(sections) {
   const doc = {
@@ -66,13 +66,13 @@ function buildDocument(sections) {
       REFERENCE_RE.lastIndex = 0;
       let m;
       while ((m = REFERENCE_RE.exec(text)) !== null) {
-        const idStart = text.indexOf(m[2], m.index);
+        const [idStart, idEnd] = m.indices[2];
         doc.references.push({
           kind: m[1] === 'ExtResource' ? 'ext' : 'sub',
           id: m[2],
           range: {
             start: { line, character: idStart },
-            end: { line, character: idStart + m[2].length },
+            end: { line, character: idEnd },
           },
         });
       }
