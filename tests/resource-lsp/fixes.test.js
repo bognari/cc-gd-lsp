@@ -53,3 +53,26 @@ test('load-steps mismatch yields a corrective edit', () => {
   assert.ok(fix);
   assert.equal(fix.edit.changes[URI][0].newText, '1');
 });
+
+test('Fix-All on 3 duplicate ids proposes three distinct new ids', () => {
+  const src = '[gd_scene format=3]\n\n[ext_resource type="X" path="res://art/player.png" id="1"]\n[ext_resource type="X" path="res://art/player.png" id="1"]\n[ext_resource type="X" path="res://art/player.png" id="1"]\n';
+  const actions = actionsFor(src).filter((a) => a.title.startsWith('Renumber id'));
+  const newIds = actions.map((a) => a.edit.changes[URI][0].newText);
+  assert.equal(newIds.length, 2); // 2nd and 3rd are duplicates
+  assert.equal(new Set(newIds).size, newIds.length); // all distinct
+});
+
+test('invalid-uid removal deletes exactly the uid attribute range (no left extension)', () => {
+  const src = '[gd_scene format=3]\n\n[ext_resource type="Script" path="res://art/player.png" uid="uid://zzz9" id="1"]\n';
+  const doc = buildDocument(tokenize(src));
+  const diags = validate(doc, PROJECT);
+  const fullRange = { start: { line: 0, character: 0 }, end: { line: 9999, character: 0 } };
+  const actions = computeCodeActions(doc, diags, fullRange, PROJECT, URI);
+  const fix = actions.find((a) => a.title.toLowerCase().includes('remove'));
+  assert.ok(fix);
+  const ext = doc.extResources[0];
+  const edit = fix.edit.changes[URI][0];
+  // the delete range equals attrFullRange.uid exactly
+  assert.deepEqual(edit.range, ext.section.attrFullRange.uid);
+  assert.equal(edit.newText, '');
+});

@@ -11,8 +11,12 @@ function distance(a, b) {
 }
 
 function rangesOverlap(a, b) {
-  if (a.end.line < b.start.line || b.end.line < a.start.line) return false;
-  return true;
+  // true unless a is entirely before b or entirely after b (line+character aware)
+  const aBeforeB = a.end.line < b.start.line
+    || (a.end.line === b.start.line && a.end.character < b.start.character);
+  const bBeforeA = b.end.line < a.start.line
+    || (b.end.line === a.start.line && b.end.character < a.start.character);
+  return !(aBeforeB || bBeforeA);
 }
 
 function replaceAction(title, uri, range, newText) {
@@ -25,6 +29,9 @@ function replaceAction(title, uri, range, newText) {
 
 function computeCodeActions(doc, diagnostics, selRange, project, uri) {
   const actions = [];
+
+  const claimedExtIds = new Set(doc.extResources.map((x) => x.id).filter(Boolean));
+  const claimedSubIds = new Set(doc.subResources.map((x) => x.id).filter(Boolean));
 
   for (const d of diagnostics) {
     if (!rangesOverlap(d.range, selRange)) continue;
@@ -40,9 +47,7 @@ function computeCodeActions(doc, diagnostics, selRange, project, uri) {
         && e.section.attrValueRange.uid.start.line === d.range.start.line
         && e.section.attrValueRange.uid.start.character === d.range.start.character);
       if (ext) {
-        const full = ext.section.attrFullRange.uid;
-        const range = { start: { line: full.start.line, character: Math.max(0, full.start.character - 1) }, end: full.end };
-        actions.push(replaceAction('Remove invalid uid attribute', uri, range, ''));
+        actions.push(replaceAction('Remove invalid uid attribute', uri, ext.section.attrFullRange.uid, ''));
       }
     }
 
@@ -61,11 +66,11 @@ function computeCodeActions(doc, diagnostics, selRange, project, uri) {
     }
 
     if (d.code === 'duplicate-ext-id' || d.code === 'duplicate-sub-id') {
-      const list = d.code === 'duplicate-ext-id' ? doc.extResources : doc.subResources;
-      const used = new Set(list.map((x) => x.id));
+      const claimed = d.code === 'duplicate-ext-id' ? claimedExtIds : claimedSubIds;
       let n = 1;
-      while (used.has(String(n))) n++;
-      actions.push(replaceAction(`Renumber duplicate id to "${n}"`, uri, d.range, String(n)));
+      while (claimed.has(String(n))) n++;
+      claimed.add(String(n)); // reserve it so a sibling duplicate fix won't reuse it
+      actions.push(replaceAction(`Renumber id to "${n}" (body references not updated)`, uri, d.range, String(n)));
     }
   }
 
