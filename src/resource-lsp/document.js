@@ -62,6 +62,26 @@ function buildDocument(sections) {
       default:
         break;
     }
+    // Scan header attribute values for inline references (Godot-3-style).
+    for (const key of Object.keys(s.attributes)) {
+      const val = s.attributes[key];
+      if (typeof val !== 'string' || val.indexOf('Resource(') === -1) continue;
+      const vr = s.attrValueRange[key];
+      if (!vr) continue;
+      REFERENCE_RE.lastIndex = 0;
+      let hm;
+      while ((hm = REFERENCE_RE.exec(val)) !== null) {
+        const idOffsetInVal = hm.indices[2][0];
+        doc.references.push({
+          kind: hm[1] === 'ExtResource' ? 'ext' : 'sub',
+          id: hm[2],
+          range: {
+            start: { line: vr.start.line, character: vr.start.character + idOffsetInVal },
+            end: { line: vr.start.line, character: vr.start.character + idOffsetInVal + hm[2].length },
+          },
+        });
+      }
+    }
     for (const { text, line } of s.bodyLines) {
       if (text.trimStart().startsWith(';')) continue; // skip Godot comment lines
       REFERENCE_RE.lastIndex = 0;

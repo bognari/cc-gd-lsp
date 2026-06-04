@@ -76,3 +76,19 @@ test('reference ranges have correct character offsets, even for keyword-substrin
   // And the slice of the source line at that range is exactly the id:
   assert.equal(line.slice(ref.range.start.character, ref.range.end.character), 'Resource');
 });
+
+test('collects references that appear in a header attribute value', () => {
+  const src = '[gd_scene format=3]\n\n[ext_resource type="Script" path="res://a.gd" id="1"]\n\n[node name="Root" type="Node" script=ExtResource("1")]\n';
+  const doc = buildDocument(tokenize(src));
+  const ref = doc.references.find((r) => r.kind === 'ext' && r.id === '1');
+  assert.ok(ref, 'header-attribute ExtResource("1") should be collected');
+  assert.equal(ref.range.start.line, 4);
+});
+
+test('a broken header-attribute reference is therefore flagged by validate', () => {
+  const { validate } = require('../../src/resource-lsp/validate.js');
+  const src = '[gd_scene format=3]\n\n[node name="Root" type="Node" script=ExtResource("99")]\n';
+  const project = { root: '/x', fileExists: () => true, findSimilarFiles: () => [] };
+  const d = validate(buildDocument(tokenize(src)), project);
+  assert.ok(d.some((x) => x.code === 'undeclared-ext-ref'));
+});
