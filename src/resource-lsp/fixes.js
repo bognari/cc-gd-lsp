@@ -3,11 +3,11 @@
 const { distance } = require('./util.js');
 
 function rangesOverlap(a, b) {
-  // true unless a is entirely before b or entirely after b (line+character aware)
+  // LSP Range.end is exclusive, so touching ranges (a.end == b.start) do NOT overlap.
   const aBeforeB = a.end.line < b.start.line
-    || (a.end.line === b.start.line && a.end.character < b.start.character);
+    || (a.end.line === b.start.line && a.end.character <= b.start.character);
   const bBeforeA = b.end.line < a.start.line
-    || (b.end.line === a.start.line && b.end.character < a.start.character);
+    || (b.end.line === a.start.line && b.end.character <= a.start.character);
   return !(aBeforeB || bBeforeA);
 }
 

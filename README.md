@@ -63,8 +63,10 @@ It reports, with fix suggestions where possible:
 parser (`resource_format_text.cpp`), so it does not produce false positives on
 valid files. Property/type-level validation (which Godot only performs at scene
 instantiation) is **not** done statically — that is planned as an optional
-Godot-backed deep-check in a future version. Binary `.scn`/`.res` files and
-`project.godot` are out of scope.
+Godot-backed deep-check in a future version. Binary `.scn`/`.res` files are out
+of scope. `project.godot` itself is not validated either — its presence is only
+used to locate the project root (and to suppress missing-file checks when no
+project root is found).
 
 ## Quickstart
 

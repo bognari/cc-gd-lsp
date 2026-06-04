@@ -46,7 +46,9 @@ function startServer(input, output) {
     } catch (err) {
       process.stderr.write(`[godot-resource] validation error: ${err && err.stack}\n`);
     }
-    conn.send({ jsonrpc: '2.0', method: 'textDocument/publishDiagnostics', params: { uri, version: entry.version, diagnostics } });
+    const params = { uri, diagnostics };
+    if (typeof entry.version === 'number') params.version = entry.version; // LSP: version must be an integer when present
+    conn.send({ jsonrpc: '2.0', method: 'textDocument/publishDiagnostics', params });
   }
 
   conn.onMessage((msg) => {
