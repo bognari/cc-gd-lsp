@@ -22,19 +22,35 @@ function uriToPath(uri) {
   }
 }
 
-function startServer(input, output) {
+function startServer(input, output, options = {}) {
   const conn = createConnection(input, output);
   const documents = new Map(); // uri -> { text, version }
   let workspaceRoot = null;
   let shutdownReceived = false;
-  const projectCache = new Map(); // root (string|null) -> project instance
+  const projectCacheMax = options.projectCacheMax ?? 8;
+  const projectCache = new Map(); // insertion order doubles as LRU order
+
+  function touchProject(root) {
+    const key = root || '';
+    if (projectCache.has(key)) {
+      const v = projectCache.get(key);
+      projectCache.delete(key);
+      projectCache.set(key, v); // move to most-recent (re-insert at end)
+      return v;
+    }
+    const proj = createProject(root);
+    projectCache.set(key, proj);
+    while (projectCache.size > projectCacheMax) {
+      const oldest = projectCache.keys().next().value; // first key = least-recently-used
+      projectCache.delete(oldest);
+    }
+    return proj;
+  }
 
   function projectFor(uri) {
     const fsPath = uriToPath(uri);
     const root = findProjectRoot(path.dirname(fsPath)) || workspaceRoot;
-    const key = root || '';
-    if (!projectCache.has(key)) projectCache.set(key, createProject(root));
-    return projectCache.get(key);
+    return touchProject(root);
   }
 
   function publish(uri) {
@@ -134,7 +150,13 @@ function startServer(input, output) {
     }
   });
 
-  return { conn, documents };
+  return {
+    conn,
+    documents,
+    __projectCacheSize: () => projectCache.size,
+    __touchProject: (root) => touchProject(root),
+    __hasProject: (root) => projectCache.has(root || ''),
+  };
 }
 
 module.exports = { startServer };

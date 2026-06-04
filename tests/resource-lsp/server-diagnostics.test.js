@@ -140,3 +140,30 @@ test('codeAction returns a fix for a missing file', async () => {
   }
   assert.ok(resp.result.some((a) => a.title.includes('res://art/player.png')));
 });
+
+test('projectFor evicts the least-recently-used root beyond the cap', () => {
+  const { PassThrough } = require('node:stream');
+  const input = new PassThrough();
+  const output = new PassThrough();
+  const handle = startServer(input, output, { projectCacheMax: 2 });
+  handle.__touchProject('/a');
+  handle.__touchProject('/b');
+  handle.__touchProject('/c'); // should evict /a (LRU)
+  assert.equal(handle.__projectCacheSize(), 2);
+  assert.equal(handle.__hasProject('/a'), false);
+  assert.equal(handle.__hasProject('/c'), true);
+});
+
+test('touching an existing root refreshes its LRU recency', () => {
+  const { PassThrough } = require('node:stream');
+  const input = new PassThrough();
+  const output = new PassThrough();
+  const handle = startServer(input, output, { projectCacheMax: 2 });
+  handle.__touchProject('/a');
+  handle.__touchProject('/b');
+  handle.__touchProject('/a'); // /a is now most-recent
+  handle.__touchProject('/c'); // should evict /b, not /a
+  assert.equal(handle.__hasProject('/a'), true);
+  assert.equal(handle.__hasProject('/b'), false);
+  assert.equal(handle.__hasProject('/c'), true);
+});
