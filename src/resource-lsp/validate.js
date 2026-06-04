@@ -102,10 +102,10 @@ function validate(doc, project) {
 
   if (first.attributes.load_steps !== undefined) {
     const declared = Number.parseInt(first.attributes.load_steps, 10);
-    const actual = doc.extResources.length + doc.subResources.length;
+    const actual = doc.extResources.length + doc.subResources.length + 1; // +1 = the main scene/resource
     if (!Number.isNaN(declared) && declared !== actual) {
       diags.push(mk(attrRange(first, 'load_steps'), SEVERITY.INFO, 'load-steps-mismatch',
-        `load_steps=${declared} but the file declares ${actual} resources. Godot ignores this value, but keeping it correct is conventional.`,
+        `load_steps=${declared} but should be ${actual} (${doc.extResources.length} ext + ${doc.subResources.length} sub + 1 main). Godot ignores this value, but keeping it correct is conventional.`,
         { actual }));
     }
   }

@@ -2,7 +2,7 @@
 
 // Minimal LSP-style JSON-RPC framing over a pair of streams.
 
-const MAX_BUFFER_SIZE = 1024 * 1024; // 1 MB
+const MAX_BUFFER_SIZE = 50 * 1024 * 1024; // 50 MB — large text scenes with embedded data
 
 function createConnection(input, output) {
   let buffer = Buffer.alloc(0);

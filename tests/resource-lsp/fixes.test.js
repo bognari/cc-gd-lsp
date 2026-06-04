@@ -51,7 +51,7 @@ test('load-steps mismatch yields a corrective edit', () => {
   const actions = actionsFor(src);
   const fix = actions.find((a) => a.title.includes('load_steps'));
   assert.ok(fix);
-  assert.equal(fix.edit.changes[URI][0].newText, '1');
+  assert.equal(fix.edit.changes[URI][0].newText, '2');
 });
 
 test('Fix-All on 3 duplicate ids proposes three distinct new ids', () => {
@@ -75,4 +75,13 @@ test('invalid-uid removal deletes exactly the uid attribute range (no left exten
   // the delete range equals attrFullRange.uid exactly
   assert.deepEqual(edit.range, ext.section.attrFullRange.uid);
   assert.equal(edit.newText, '');
+});
+
+test('invalid-uid on the root header offers a remove action', () => {
+  const src = '[gd_scene format=3 uid="uid://zzz9"]\n';
+  const doc = buildDocument(tokenize(src));
+  const diags = validate(doc, PROJECT);
+  const fullRange = { start: { line: 0, character: 0 }, end: { line: 9999, character: 0 } };
+  const actions = computeCodeActions(doc, diags, fullRange, PROJECT, URI);
+  assert.ok(actions.some((a) => a.title.toLowerCase().includes('remove')));
 });

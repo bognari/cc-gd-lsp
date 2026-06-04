@@ -63,6 +63,7 @@ function buildDocument(sections) {
         break;
     }
     for (const { text, line } of s.bodyLines) {
+      if (text.trimStart().startsWith(';')) continue; // skip Godot comment lines
       REFERENCE_RE.lastIndex = 0;
       let m;
       while ((m = REFERENCE_RE.exec(text)) !== null) {

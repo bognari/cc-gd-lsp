@@ -55,6 +55,12 @@ test('classifies a resource document', () => {
   assert.equal(doc.nodes.length, 0);
 });
 
+test('references inside a comment line are ignored', () => {
+  const src = '[gd_scene format=3]\n\n[node name="R" type="Node"]\n; script = ExtResource("99")\n';
+  const doc = buildDocument(tokenize(src));
+  assert.equal(doc.references.length, 0);
+});
+
 test('reference ranges have correct character offsets, even for keyword-substring ids', () => {
   const src = '[gd_scene format=3]\n\n[ext_resource type="X" path="res://a.gd" id="Resource"]\n\n[node name="R" type="Node"]\nscript = ExtResource("Resource")\n';
   const doc = buildDocument(tokenize(src));

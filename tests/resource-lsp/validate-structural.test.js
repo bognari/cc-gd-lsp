@@ -67,11 +67,19 @@ test('flags duplicate ext id as warning', () => {
   assert.equal(dup.severity, 2);
 });
 
-test('clean scene yields only the load_steps info diagnostic', () => {
+test('a correct scene yields no diagnostics', () => {
   const src = '[gd_scene load_steps=2 format=3 uid="uid://abc"]\n\n[ext_resource type="Script" path="res://a.gd" id="1"]\n\n[node name="Root" type="Node"]\nscript = ExtResource("1")\n';
   const d = diag(src);
-  assert.deepEqual(d.map((x) => x.code), ['load-steps-mismatch']);
-  assert.equal(d[0].severity, 3);
+  assert.deepEqual(d, []);
+});
+
+test('flags a genuinely wrong load_steps as info', () => {
+  const src = '[gd_scene load_steps=5 format=3]\n\n[ext_resource type="Script" path="res://a.gd" id="1"]\n';
+  const d = diag(src);
+  const ls = d.find((x) => x.code === 'load-steps-mismatch');
+  assert.ok(ls);
+  assert.equal(ls.severity, 3);
+  assert.equal(ls.data.actual, 2); // 1 ext + 0 sub + 1
 });
 
 test('a valid Godot UID is NOT flagged', () => {

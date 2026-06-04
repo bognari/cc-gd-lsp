@@ -50,78 +50,85 @@ function startServer(input, output) {
   }
 
   conn.onMessage((msg) => {
-    switch (msg.method) {
-      case 'initialize': {
-        const rootUri = msg.params && msg.params.rootUri;
-        if (rootUri) workspaceRoot = uriToPath(rootUri);
-        conn.send({
-          jsonrpc: '2.0',
-          id: msg.id,
-          result: { capabilities: { textDocumentSync: { openClose: true, change: 1, save: true }, codeActionProvider: true } },
-        });
-        return;
-      }
-      case 'initialized':
-        return;
-      case 'textDocument/didOpen': {
-        const { uri, text, version } = msg.params.textDocument;
-        documents.set(uri, { text, version });
-        publish(uri);
-        return;
-      }
-      case 'textDocument/didChange': {
-        const uri = msg.params.textDocument.uri;
-        const changes = msg.params.contentChanges;
-        if (changes && changes.length) {
-          documents.set(uri, { text: changes[changes.length - 1].text, version: msg.params.textDocument.version }); // Full sync
+    try {
+      switch (msg.method) {
+        case 'initialize': {
+          const rootUri = msg.params && msg.params.rootUri;
+          if (rootUri) workspaceRoot = uriToPath(rootUri);
+          conn.send({
+            jsonrpc: '2.0',
+            id: msg.id,
+            result: { capabilities: { textDocumentSync: { openClose: true, change: 1, save: true }, codeActionProvider: true } },
+          });
+          return;
         }
-        publish(uri);
-        return;
-      }
-      case 'textDocument/didSave': {
-        const uri = msg.params.textDocument.uri;
-        if (msg.params.text !== undefined) {
-          const prev = documents.get(uri);
-          documents.set(uri, { text: msg.params.text, version: prev ? prev.version : null });
+        case 'initialized':
+          return;
+        case 'textDocument/didOpen': {
+          const { uri, text, version } = msg.params.textDocument;
+          documents.set(uri, { text, version });
+          publish(uri);
+          return;
         }
-        publish(uri);
-        return;
-      }
-      case 'textDocument/didClose': {
-        const uri = msg.params.textDocument.uri;
-        documents.delete(uri);
-        conn.send({ jsonrpc: '2.0', method: 'textDocument/publishDiagnostics', params: { uri, diagnostics: [] } });
-        return;
-      }
-      case 'textDocument/codeAction': {
-        const uri = msg.params.textDocument.uri;
-        const selRange = msg.params.range;
-        const entry = documents.get(uri);
-        let actions = [];
-        if (entry !== undefined) {
-          try {
-            const doc = buildDocument(tokenize(entry.text));
-            const proj = projectFor(uri);
-            const diags = validate(doc, proj);
-            actions = computeCodeActions(doc, diags, selRange, proj, uri);
-          } catch (err) {
-            process.stderr.write(`[godot-resource] codeAction error: ${err && err.stack}\n`);
+        case 'textDocument/didChange': {
+          const uri = msg.params.textDocument.uri;
+          const changes = msg.params.contentChanges;
+          if (changes && changes.length) {
+            documents.set(uri, { text: changes[changes.length - 1].text, version: msg.params.textDocument.version }); // Full sync
           }
+          publish(uri);
+          return;
         }
-        conn.send({ jsonrpc: '2.0', id: msg.id, result: actions });
-        return;
+        case 'textDocument/didSave': {
+          const uri = msg.params.textDocument.uri;
+          if (msg.params.text !== undefined) {
+            const prev = documents.get(uri);
+            documents.set(uri, { text: msg.params.text, version: prev ? prev.version : null });
+          }
+          publish(uri);
+          return;
+        }
+        case 'textDocument/didClose': {
+          const uri = msg.params.textDocument.uri;
+          documents.delete(uri);
+          conn.send({ jsonrpc: '2.0', method: 'textDocument/publishDiagnostics', params: { uri, diagnostics: [] } });
+          return;
+        }
+        case 'textDocument/codeAction': {
+          const uri = msg.params.textDocument.uri;
+          const selRange = msg.params.range;
+          const entry = documents.get(uri);
+          let actions = [];
+          if (entry !== undefined) {
+            try {
+              const doc = buildDocument(tokenize(entry.text));
+              const proj = projectFor(uri);
+              const diags = validate(doc, proj);
+              actions = computeCodeActions(doc, diags, selRange, proj, uri);
+            } catch (err) {
+              process.stderr.write(`[godot-resource] codeAction error: ${err && err.stack}\n`);
+            }
+          }
+          conn.send({ jsonrpc: '2.0', id: msg.id, result: actions });
+          return;
+        }
+        case 'shutdown':
+          shutdownReceived = true;
+          conn.send({ jsonrpc: '2.0', id: msg.id, result: null });
+          return;
+        case 'exit':
+          process.exit(shutdownReceived ? 0 : 1);
+          return;
+        default:
+          if (msg.id !== undefined) {
+            conn.send({ jsonrpc: '2.0', id: msg.id, error: { code: -32601, message: 'Method not found' } });
+          }
       }
-      case 'shutdown':
-        shutdownReceived = true;
-        conn.send({ jsonrpc: '2.0', id: msg.id, result: null });
-        return;
-      case 'exit':
-        process.exit(shutdownReceived ? 0 : 1);
-        return;
-      default:
-        if (msg.id !== undefined) {
-          conn.send({ jsonrpc: '2.0', id: msg.id, error: { code: -32601, message: 'Method not found' } });
-        }
+    } catch (err) {
+      process.stderr.write(`[godot-resource] handler error: ${err && err.stack}\n`);
+      if (msg && msg.id !== undefined) {
+        conn.send({ jsonrpc: '2.0', id: msg.id, error: { code: -32603, message: 'Internal error' } });
+      }
     }
   });
 

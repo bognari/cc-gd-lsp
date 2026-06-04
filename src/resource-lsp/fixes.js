@@ -1,14 +1,6 @@
 'use strict';
 
-function distance(a, b) {
-  const m = a.length, n = b.length;
-  const dp = Array.from({ length: m + 1 }, (_, i) => [i, ...Array(n).fill(0)]);
-  for (let j = 0; j <= n; j++) dp[0][j] = j;
-  for (let i = 1; i <= m; i++)
-    for (let j = 1; j <= n; j++)
-      dp[i][j] = Math.min(dp[i - 1][j] + 1, dp[i][j - 1] + 1, dp[i - 1][j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
-  return dp[m][n];
-}
+const { distance } = require('./util.js');
 
 function rangesOverlap(a, b) {
   // true unless a is entirely before b or entirely after b (line+character aware)
@@ -43,11 +35,11 @@ function computeCodeActions(doc, diagnostics, selRange, project, uri) {
     }
 
     if (d.code === 'invalid-uid') {
-      const ext = doc.extResources.find((e) => e.section.attrValueRange.uid
-        && e.section.attrValueRange.uid.start.line === d.range.start.line
-        && e.section.attrValueRange.uid.start.character === d.range.start.character);
-      if (ext) {
-        actions.push(replaceAction('Remove invalid uid attribute', uri, ext.section.attrFullRange.uid, ''));
+      const sec = doc.sections.find((s) => s.attrValueRange.uid
+        && s.attrValueRange.uid.start.line === d.range.start.line
+        && s.attrValueRange.uid.start.character === d.range.start.character);
+      if (sec) {
+        actions.push(replaceAction('Remove invalid uid attribute', uri, sec.attrFullRange.uid, ''));
       }
     }
 
