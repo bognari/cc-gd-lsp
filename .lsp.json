@@ -11,5 +11,17 @@
     "startupTimeout": 45000,
     "shutdownTimeout": 5000,
     "maxRestarts": 3
+  },
+  "godot-resource": {
+    "command": "node",
+    "args": ["${CLAUDE_PLUGIN_ROOT}/bin/godot-resource-lsp.js"],
+    "extensionToLanguage": {
+      ".tscn": "godot-resource",
+      ".tres": "godot-resource"
+    },
+    "transport": "stdio",
+    "startupTimeout": 10000,
+    "shutdownTimeout": 3000,
+    "maxRestarts": 3
   }
 }

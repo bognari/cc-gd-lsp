@@ -37,6 +37,9 @@ logs/
 # Research scratchpad used while building the plugin; not part of the release.
 other_lsp.txt
 
+# Ephemeral review-audit sidecars (generated per-commit by review tooling).
+docs/audits/
+
 # ---- Environment / secrets -------------------------------------------------
 .env
 .env.local
