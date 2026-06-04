@@ -2,6 +2,21 @@
 
 const REFERENCE_RE = /\b(ExtResource|SubResource)\(\s*"?([0-9A-Za-z_]+)"?\s*\)/gd;
 
+// A header attribute is an inline reference only when its ENTIRE value is the call,
+// e.g. script=ExtResource("1"). A quoted string value that merely contains the text
+// (e.g. hint="see ExtResource(1)") is NOT a reference.
+const HEADER_REF_RE = /^(ExtResource|SubResource)\(\s*"?([0-9A-Za-z_]+)"?\s*\)$/d;
+
+function isInsideQuotedString(text, index) {
+  let inString = false;
+  for (let i = 0; i < index; i++) {
+    const ch = text[i];
+    if (ch === '\\') { i++; continue; } // skip the escaped char
+    if (ch === '"') inString = !inString;
+  }
+  return inString;
+}
+
 function buildDocument(sections) {
   const doc = {
     kind: 'unknown',
@@ -62,11 +77,41 @@ function buildDocument(sections) {
       default:
         break;
     }
+    // Inline references appear in node/connection headers (Godot-3 style), never in
+    // ext_resource/sub_resource declaration headers — skip those to avoid false positives
+    // from path/type values that merely contain the substring "Resource(".
+    if (s.name !== 'ext_resource' && s.name !== 'sub_resource') {
+      for (const key of Object.keys(s.attributes)) {
+        const val = s.attributes[key];
+        if (typeof val !== 'string' || val.indexOf('Resource(') === -1) continue;
+        const vr = s.attrValueRange[key];
+        if (!vr) continue;
+        // NOTE: vr points at the raw source value; for the unquoted Godot-3 form
+        // (script=ExtResource("1")) the offset math below is exact. Godot never
+        // emits the outer-quoted-with-escapes form, so no escape remapping is needed.
+        // The anchored regex ensures only values whose ENTIRE content is the call
+        // are treated as references — a quoted string that merely contains the text
+        // (e.g. hint="see ExtResource(1) here") is not a reference.
+        const hm = HEADER_REF_RE.exec(val);
+        if (hm) {
+          const idOffsetInVal = hm.indices[2][0];
+          doc.references.push({
+            kind: hm[1] === 'ExtResource' ? 'ext' : 'sub',
+            id: hm[2],
+            range: {
+              start: { line: vr.start.line, character: vr.start.character + idOffsetInVal },
+              end: { line: vr.start.line, character: vr.start.character + idOffsetInVal + hm[2].length },
+            },
+          });
+        }
+      }
+    }
     for (const { text, line } of s.bodyLines) {
       if (text.trimStart().startsWith(';')) continue; // skip Godot comment lines
       REFERENCE_RE.lastIndex = 0;
       let m;
       while ((m = REFERENCE_RE.exec(text)) !== null) {
+        if (isInsideQuotedString(text, m.index)) continue; // literal text inside a string, not a reference
         const [idStart, idEnd] = m.indices[2];
         doc.references.push({
           kind: m[1] === 'ExtResource' ? 'ext' : 'sub',

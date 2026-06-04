@@ -1,7 +1,7 @@
 {
   "$schema": "https://raw.githubusercontent.com/claude-contrib/claude-languages/main/.github/schemas/plugin.schema.json",
   "name": "gdscript-lsp",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "GDScript (Godot Engine) language server for Claude Code. Bridges Godot's built-in TCP LSP to stdio and auto-launches the editor headless when needed.",
   "author": {
     "name": "Stephan Mielke"

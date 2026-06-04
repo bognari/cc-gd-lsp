@@ -21,9 +21,14 @@ test('fileExists resolves res:// against the root', () => {
   assert.equal(project.fileExists('res://missing.png'), false);
 });
 
-test('findSimilarFiles suggests by basename similarity', () => {
+test('findSimilarFiles suggests by basename similarity', async () => {
   const project = createProject(PROJ);
-  const hits = project.findSimilarFiles('res://art/palyer.png', 3);
+  let hits = [];
+  for (let i = 0; i < 50 && !hits.includes('res://art/player.png'); i++) {
+    hits = project.findSimilarFiles('res://art/palyer.png', 3);
+    if (hits.includes('res://art/player.png')) break;
+    await new Promise((r) => setTimeout(r, 10));
+  }
   assert.ok(hits.includes('res://art/player.png'));
 });
 
@@ -48,13 +53,35 @@ test('resToAbs returns null for non-res paths or null root', () => {
   assert.equal(resToAbs(null, 'res://x'), null);
 });
 
-test('findSimilarFiles matches case-insensitively', () => {
+test('findSimilarFiles matches case-insensitively', async () => {
   const project = createProject(PROJ);
-  const hits = project.findSimilarFiles('res://art/PLAYER.PNG', 3);
+  let hits = [];
+  for (let i = 0; i < 50 && !hits.includes('res://art/player.png'); i++) {
+    hits = project.findSimilarFiles('res://art/PLAYER.PNG', 3);
+    if (hits.includes('res://art/player.png')) break;
+    await new Promise((r) => setTimeout(r, 10));
+  }
   assert.ok(hits.includes('res://art/player.png'));
 });
 
 test('fileExists rejects path-traversal escapes', () => {
   const project = createProject(PROJ);
   assert.equal(project.fileExists('res://../../etc/passwd'), false);
+});
+
+test('findSimilarFiles works once the async index has warmed', async () => {
+  const project = createProject(PROJ);
+  let hits = [];
+  for (let i = 0; i < 50 && hits.length === 0; i++) {
+    hits = project.findSimilarFiles('res://art/palyer.png', 3);
+    if (hits.length) break;
+    await new Promise((r) => setTimeout(r, 10));
+  }
+  assert.ok(hits.includes('res://art/player.png'));
+});
+
+test('findSimilarFiles returns [] (never throws) before the index is ready', () => {
+  const project = createProject(PROJ);
+  const hits = project.findSimilarFiles('res://art/palyer.png', 3);
+  assert.ok(Array.isArray(hits));
 });

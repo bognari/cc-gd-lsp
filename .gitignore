@@ -40,6 +40,13 @@ other_lsp.txt
 # Ephemeral review-audit sidecars (generated per-commit by review tooling).
 docs/audits/
 
+# Godot import caches that a deep-check run may create inside test fixtures.
+tests/resource-lsp/fixtures/**/.godot/
+tests/resource-lsp/fixtures/**/.import/
+
+# Temp deep-check tool-script the runner copies into a project (pid-suffixed dotfile).
+.lsp_deep_check_*.gd
+
 # ---- Environment / secrets -------------------------------------------------
 .env
 .env.local

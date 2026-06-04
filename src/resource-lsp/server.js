@@ -8,6 +8,8 @@ const { buildDocument } = require('./document.js');
 const { validate } = require('./validate.js');
 const { createProject, findProjectRoot } = require('./project.js');
 const { computeCodeActions } = require('./fixes.js');
+const { runDeepCheck: realRunDeepCheck } = require('./deepcheck.js');
+const { locateGodot } = require('./godot-locate.js');
 
 function uriToPath(uri) {
   try {
@@ -22,19 +24,54 @@ function uriToPath(uri) {
   }
 }
 
-function startServer(input, output) {
+function startServer(input, output, options = {}) {
   const conn = createConnection(input, output);
   const documents = new Map(); // uri -> { text, version }
   let workspaceRoot = null;
   let shutdownReceived = false;
-  const projectCache = new Map(); // root (string|null) -> project instance
+  const projectCacheMax = Math.max(1, options.projectCacheMax ?? 8);
+  const projectCache = new Map(); // insertion order doubles as LRU order
+  const staticDiagnostics = new Map();  // uri -> Diagnostic[]
+  const deepDiagnostics = new Map();    // uri -> Diagnostic[]
+  const deepState = new Map();          // rootKey -> { running, pending, timer, godot }
+
+  const argv = options.argv || [];
+  const deepDisabled = argv.includes('--no-deep-check');
+  const deepDebounceMs = options.deepDebounceMs ?? 700;
+  const runDeepCheck = options.runDeepCheck || realRunDeepCheck;
+  const godotFlagIdx = argv.indexOf('--godot');
+  const godotPath = godotFlagIdx >= 0 ? argv[godotFlagIdx + 1] : undefined;
+
+  function touchProject(root) {
+    const key = root || '';
+    if (projectCache.has(key)) {
+      const v = projectCache.get(key);
+      projectCache.delete(key);
+      projectCache.set(key, v); // move to most-recent (re-insert at end)
+      return v;
+    }
+    const proj = createProject(root);
+    projectCache.set(key, proj);
+    while (projectCache.size > projectCacheMax) {
+      const oldest = projectCache.keys().next().value; // first key = least-recently-used
+      projectCache.delete(oldest);
+    }
+    return proj;
+  }
 
   function projectFor(uri) {
     const fsPath = uriToPath(uri);
     const root = findProjectRoot(path.dirname(fsPath)) || workspaceRoot;
-    const key = root || '';
-    if (!projectCache.has(key)) projectCache.set(key, createProject(root));
-    return projectCache.get(key);
+    return touchProject(root);
+  }
+
+  function sendPublish(uri) {
+    const entry = documents.get(uri);
+    const stat = staticDiagnostics.get(uri) || [];
+    const deep = deepDiagnostics.get(uri) || [];
+    const params = { uri, diagnostics: [...stat, ...deep] };
+    if (entry && typeof entry.version === 'number') params.version = entry.version;
+    conn.send({ jsonrpc: '2.0', method: 'textDocument/publishDiagnostics', params });
   }
 
   function publish(uri) {
@@ -46,9 +83,63 @@ function startServer(input, output) {
     } catch (err) {
       process.stderr.write(`[godot-resource] validation error: ${err && err.stack}\n`);
     }
-    const params = { uri, diagnostics };
-    if (typeof entry.version === 'number') params.version = entry.version; // LSP: version must be an integer when present
-    conn.send({ jsonrpc: '2.0', method: 'textDocument/publishDiagnostics', params });
+    staticDiagnostics.set(uri, diagnostics);
+    sendPublish(uri);
+  }
+
+  function rootKeyFor(uri) {
+    const fsPath = uriToPath(uri);
+    return findProjectRoot(path.dirname(fsPath)) || workspaceRoot || '';
+  }
+
+  function uriUnderRoot(uri, root) {
+    try {
+      const p = uriToPath(uri);
+      const rel = path.relative(root, p);
+      return !rel.startsWith('..') && !path.isAbsolute(rel);
+    } catch { return false; }
+  }
+
+  function scheduleDeepCheck(uri) {
+    if (deepDisabled) return;
+    const root = rootKeyFor(uri);
+    if (!root) return;
+    let st = deepState.get(root);
+    if (!st) { st = { running: false, pending: false, timer: null, godot: undefined }; deepState.set(root, st); }
+    if (st.godot === null) return; // previously determined Godot is absent -> skip cheaply
+    if (st.timer) clearTimeout(st.timer);
+    st.timer = setTimeout(() => startDeepRun(root), deepDebounceMs);
+  }
+
+  function startDeepRun(root) {
+    if (shutdownReceived) return;
+    const st = deepState.get(root);
+    if (!st) return;
+    if (st.timer) { clearTimeout(st.timer); st.timer = null; }
+    if (st.godot === undefined) st.godot = locateGodot(godotPath) || null; // lazy locate off the message-handler path
+    if (!st.godot) return; // no Godot available -> deep-check silently unavailable
+    if (st.running) { st.pending = true; return; }
+    st.running = true;
+    st.pending = false;
+    const controller = new AbortController();
+    st.controller = controller;
+    runDeepCheck(root, { godotPath: st.godot, signal: controller.signal })
+      .then((map) => applyDeepResults(root, map))
+      .catch((err) => process.stderr.write(`[godot-resource] deep-check error: ${err && err.stack}\n`))
+      .finally(() => {
+        st.running = false;
+        st.controller = null;
+        if (st.pending) startDeepRun(root);
+      });
+  }
+
+  function applyDeepResults(root, map) {
+    if (shutdownReceived) return;
+    const prevUris = new Set([...deepDiagnostics.keys()].filter((u) => uriUnderRoot(u, root)));
+    for (const uri of prevUris) deepDiagnostics.delete(uri);
+    for (const [uri, diags] of map) deepDiagnostics.set(uri, diags);
+    const affected = new Set([...prevUris, ...map.keys()]);
+    for (const uri of affected) sendPublish(uri);
   }
 
   conn.onMessage((msg) => {
@@ -88,12 +179,14 @@ function startServer(input, output) {
             documents.set(uri, { text: msg.params.text, version: prev ? prev.version : null });
           }
           publish(uri);
+          scheduleDeepCheck(uri);
           return;
         }
         case 'textDocument/didClose': {
           const uri = msg.params.textDocument.uri;
           documents.delete(uri);
-          conn.send({ jsonrpc: '2.0', method: 'textDocument/publishDiagnostics', params: { uri, diagnostics: [] } });
+          staticDiagnostics.delete(uri);
+          sendPublish(uri); // union = remaining deep diags (project-wide) or []
           return;
         }
         case 'textDocument/codeAction': {
@@ -116,6 +209,10 @@ function startServer(input, output) {
         }
         case 'shutdown':
           shutdownReceived = true;
+          for (const st of deepState.values()) {
+            if (st.timer) { clearTimeout(st.timer); st.timer = null; }
+            if (st.controller) { try { st.controller.abort(); } catch {} }
+          }
           conn.send({ jsonrpc: '2.0', id: msg.id, result: null });
           return;
         case 'exit':
@@ -134,7 +231,13 @@ function startServer(input, output) {
     }
   });
 
-  return { conn, documents };
+  return {
+    conn,
+    documents,
+    __projectCacheSize: () => projectCache.size,
+    __touchProject: (root) => touchProject(root),
+    __hasProject: (root) => projectCache.has(root || ''),
+  };
 }
 
 module.exports = { startServer };
