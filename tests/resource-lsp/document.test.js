@@ -116,3 +116,17 @@ test('a real unquoted ExtResource value is still a reference', () => {
   const doc = buildDocument(tokenize(src));
   assert.equal(doc.references.length, 1);
 });
+
+test('a bare-id ExtResource(...) inside a quoted string is suppressed by the guard', () => {
+  // ExtResource(99) here DOES match REFERENCE_RE (bare id), so this exercises isInsideQuotedString
+  const src = '[gd_scene format=3]\n\n[node name="R" type="Label"]\ntext = "label ExtResource(99) here"\n';
+  const doc = buildDocument(tokenize(src));
+  assert.equal(doc.references.length, 0);
+});
+
+test('the same bare-id SubResource(...) NOT inside a string is still collected', () => {
+  const src = '[gd_scene format=3]\n\n[node name="R" type="Node"]\nshape = SubResource(99)\n';
+  const doc = buildDocument(tokenize(src));
+  assert.equal(doc.references.length, 1);
+  assert.equal(doc.references[0].id, '99');
+});
