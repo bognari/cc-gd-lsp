@@ -84,3 +84,9 @@ test('uid containing 9 or z IS flagged (Godot never generates those)', () => {
   const d = diag('[gd_scene format=3]\n\n[ext_resource type="Script" path="res://a.gd" uid="uid://abc9z" id="1"]\n');
   assert.ok(d.some((x) => x.code === 'invalid-uid' && x.severity === 2));
 });
+
+test('ext-file-missing is suppressed when there is no project root', () => {
+  const noRoot = { root: null, fileExists: () => false, findSimilarFiles: () => [] };
+  const d = validate(buildDocument(tokenize('[gd_scene format=3]\n\n[ext_resource type="Texture2D" path="res://x.png" id="1"]\n')), noRoot);
+  assert.ok(!d.some((x) => x.code === 'ext-file-missing'));
+});

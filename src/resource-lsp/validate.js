@@ -91,7 +91,7 @@ function validate(doc, project) {
   }
 
   for (const ext of doc.extResources) {
-    if (ext.path && ext.path.startsWith('res://') && !project.fileExists(ext.path)) {
+    if (project.root && ext.path && ext.path.startsWith('res://') && !project.fileExists(ext.path)) {
       const suggestions = project.findSimilarFiles(ext.path, 3);
       const hint = suggestions.length ? ` Did you mean: ${suggestions.join(', ')}?` : '';
       diags.push(mk(attrRange(ext.section, 'path'), SEVERITY.ERROR, 'ext-file-missing',

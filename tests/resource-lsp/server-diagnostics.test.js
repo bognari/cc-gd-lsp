@@ -79,6 +79,20 @@ test('didClose clears diagnostics', async () => {
   assert.deepEqual(last.params.diagnostics, []);
 });
 
+test('publishDiagnostics includes the document version', async () => {
+  const input = new PassThrough();
+  const output = new PassThrough();
+  const messages = [];
+  collect(output, (m) => messages.push(m));
+  startServer(input, output);
+  input.write(frame({ jsonrpc: '2.0', id: 1, method: 'initialize', params: { rootUri: 'file://' + PROJ, capabilities: {} } }));
+  const uri = 'file://' + path.join(PROJ, 'v.tscn');
+  input.write(frame({ jsonrpc: '2.0', method: 'textDocument/didOpen', params: { textDocument: { uri, languageId: 'godot-resource', version: 7, text: '[banana]\n' } } }));
+  await waitFor(() => messages, (ms) => ms.some((m) => m.method === 'textDocument/publishDiagnostics'));
+  const pub = messages.find((m) => m.method === 'textDocument/publishDiagnostics');
+  assert.equal(pub.params.version, 7);
+});
+
 test('didChange re-validates with the updated text', async () => {
   const input = new PassThrough();
   const output = new PassThrough();
