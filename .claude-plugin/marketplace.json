@@ -5,14 +5,14 @@
   },
   "metadata": {
     "description": "Claude Code marketplace hosting the gdscript-lsp plugin (Godot GDScript LSP bridge).",
-    "version": "0.2.0"
+    "version": "0.3.0"
   },
   "plugins": [
     {
       "name": "gdscript-lsp",
       "source": "./",
       "description": "GDScript language server for Claude Code (auto-launches Godot headless).",
-      "version": "0.2.0",
+      "version": "0.3.0",
       "category": "language-servers",
       "tags": ["lsp", "godot", "gdscript", "gdshader"],
       "keywords": [

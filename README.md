@@ -68,6 +68,43 @@ of scope. `project.godot` itself is not validated either — its presence is onl
 used to locate the project root (and to suppress missing-file checks when no
 project root is found).
 
+### Optional deep-check (loads scenes through Godot)
+
+When a Godot binary is found on your machine, **saving** a `.tscn`/`.tres` also
+runs a project-wide *deep-check*: a bundled headless Godot pass that actually
+loads every scene/resource and reports errors the static validator cannot see,
+each mapped to `res://file:line`:
+
+- a `sub_resource` of an unknown/uninstantiable type,
+- a missing dependency (with Godot's own fidelity),
+- a referenced script that fails to parse/load,
+- any other resource that fails to load.
+
+Behavior:
+
+- Runs automatically **on save**, but only when Godot is locatable (same
+  discovery as the GDScript bridge, including the Mono builds). It is
+  **debounced** and **project-wide** (one headless pass per save burst,
+  surfacing errors across all files, even ones you don't have open).
+- It needs the project's `.godot/` import cache (open the project in Godot
+  once first).
+- Disable it with `--no-deep-check` in the `godot-resource` args.
+
+**Scope:** the deep-check is *load-only*. It does **not** validate property
+*types* (Godot silently coerces those) and does **not** flag unknown node
+`type=` classes (that requires instantiating scenes, which would run their
+`@tool` scripts — unsafe as a default). Instantiation-level checks are a
+possible future enhancement.
+
+```json
+{
+  "godot-resource": {
+    "command": "node",
+    "args": ["${CLAUDE_PLUGIN_ROOT}/bin/godot-resource-lsp.js", "--no-deep-check"]
+  }
+}
+```
+
 ## Quickstart
 
 ### Install from a local clone
