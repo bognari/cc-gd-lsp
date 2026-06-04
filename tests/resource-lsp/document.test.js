@@ -104,3 +104,15 @@ test('ext_resource path containing "ExtResource(" is NOT treated as a reference'
   // the only thing here is the declaration itself; no inline reference should be collected
   assert.equal(doc.references.length, 0);
 });
+
+test('ExtResource text inside a quoted string value is NOT a reference', () => {
+  const src = '[gd_scene format=3]\n\n[node name="R" type="Label"]\ntext = "see ExtResource(\\"99\\") in the docs"\n';
+  const doc = buildDocument(tokenize(src));
+  assert.equal(doc.references.length, 0);
+});
+
+test('a real unquoted ExtResource value is still a reference', () => {
+  const src = '[gd_scene format=3]\n\n[ext_resource type="Script" path="res://a.gd" id="1"]\n\n[node name="R" type="Node"]\nscript = ExtResource("1")\n';
+  const doc = buildDocument(tokenize(src));
+  assert.equal(doc.references.length, 1);
+});

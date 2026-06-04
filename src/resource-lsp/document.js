@@ -2,6 +2,16 @@
 
 const REFERENCE_RE = /\b(ExtResource|SubResource)\(\s*"?([0-9A-Za-z_]+)"?\s*\)/gd;
 
+function isInsideQuotedString(text, index) {
+  let inString = false;
+  for (let i = 0; i < index; i++) {
+    const ch = text[i];
+    if (ch === '\\') { i++; continue; } // skip the escaped char
+    if (ch === '"') inString = !inString;
+  }
+  return inString;
+}
+
 function buildDocument(sections) {
   const doc = {
     kind: 'unknown',
@@ -94,6 +104,7 @@ function buildDocument(sections) {
       REFERENCE_RE.lastIndex = 0;
       let m;
       while ((m = REFERENCE_RE.exec(text)) !== null) {
+        if (isInsideQuotedString(text, m.index)) continue; // literal text inside a string, not a reference
         const [idStart, idEnd] = m.indices[2];
         doc.references.push({
           kind: m[1] === 'ExtResource' ? 'ext' : 'sub',
