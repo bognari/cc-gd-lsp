@@ -7,6 +7,7 @@ const { tokenize } = require('./tokenizer.js');
 const { buildDocument } = require('./document.js');
 const { validate } = require('./validate.js');
 const { createProject, findProjectRoot } = require('./project.js');
+const { computeCodeActions } = require('./fixes.js');
 
 function uriToPath(uri) {
   try {
@@ -90,6 +91,24 @@ function startServer(input, output) {
         const uri = msg.params.textDocument.uri;
         documents.delete(uri);
         conn.send({ jsonrpc: '2.0', method: 'textDocument/publishDiagnostics', params: { uri, diagnostics: [] } });
+        return;
+      }
+      case 'textDocument/codeAction': {
+        const uri = msg.params.textDocument.uri;
+        const selRange = msg.params.range;
+        const entry = documents.get(uri);
+        let actions = [];
+        if (entry !== undefined) {
+          try {
+            const doc = buildDocument(tokenize(entry.text));
+            const proj = projectFor(uri);
+            const diags = validate(doc, proj);
+            actions = computeCodeActions(doc, diags, selRange, proj, uri);
+          } catch (err) {
+            process.stderr.write(`[godot-resource] codeAction error: ${err && err.stack}\n`);
+          }
+        }
+        conn.send({ jsonrpc: '2.0', id: msg.id, result: actions });
         return;
       }
       case 'shutdown':
