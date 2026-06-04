@@ -33,4 +33,5 @@ func _scan(dir_path: String) -> Array:
 		elif n.ends_with(".tscn") or n.ends_with(".tres"):
 			out.append(full)
 		n = d.get_next()
+	d.list_dir_end()
 	return out

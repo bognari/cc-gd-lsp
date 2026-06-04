@@ -18,14 +18,20 @@ This was tested against a fixture project containing deliberately broken scenes:
 - `godot --headless --quit --path <root> <scene>` loads exactly one scene as the main scene. It surfaces that scene's errors but is single-file.
 - A bundled `@tool extends SceneTree` script run via `godot --headless --path <root> --script res://scripts/deep_check.gd` that recursively `ResourceLoader.load()`s every `.tscn`/`.tres` surfaces **all** errors project-wide, each (where Godot has a location) as `res://<file>:<line> - <message>` on stderr. This is the mechanism this plan uses.
 
-**What the deep-check uniquely catches (verified):**
+**What the deep-check catches via `ResourceLoader.load()` (load-only, verified — all with `res://file:line`):**
 
 | Broken input | Godot stderr (verbatim shape) |
 |---|---|
-| `[node type="ThisClassDoesNotExist"]` | `ERROR: Cannot get class 'ThisClassDoesNotExist'.` + `WARNING: Node Root of type ... cannot be created. A placeholder will be created instead.` |
 | `[sub_resource type="NotARealResource" id="s1"]` | `ERROR: res://bad_subres.tscn:3 - Parse Error: Can't create sub resource of type 'NotARealResource'.` |
 | attached `.gd` with a syntax error | `SCRIPT ERROR: Parse Error: ...` + `ERROR: Failed to load script "res://bad_script.gd" with error "Parse error".` |
 | `ext_resource` path missing | `ERROR: res://missing_dep.tscn:6 - Parse Error: [ext_resource] referenced non-existent resource at: res://art/nope.png.` |
+
+**Deferred (NOT in v2 — requires `.instantiate()`):** an unknown node `type="ThisClassDoesNotExist"`
+only errors at scene *instantiation* time (`ResourceLoader.load()` alone does NOT surface it —
+empirically verified). Instantiating arbitrary user scenes on every save would run their `@tool`
+script `_init` side effects, which is unsafe as a default, and the resulting "Cannot get class"
+error has no `res://file:line` to map cleanly. v2 is therefore **load-only**; instantiation-level
+node-class checking is a documented future enhancement.
 
 **What it does NOT catch (verified, do not promise it):** property *type* mismatches like `position = "not_a_vector"` — Godot's text loader silently coerces/drops them, emitting nothing. So the deep-check is a *scene-load/instantiation* check, **not** a property-type checker. Diagnostics with a clean `res://file:line` map directly; location-less errors (e.g. "Cannot get class") are attached to the file being saved as project-level info (best-effort).
 
