@@ -1,6 +1,6 @@
 'use strict';
 
-const HEADER_RE = /^\s*\[([A-Za-z_][\w]*)\b([^\]]*)\]\s*$/;
+const HEADER_RE = /^\s*\[([A-Za-z_][\w]*)\b((?:[^\]"]|"(?:[^"\\]|\\.)*")*)\]\s*$/;
 
 // Parse `key=value` / `key="value"` pairs out of a header's attribute span.
 // Returns { attributes, attrValueRange, attrFullRange } with ranges on `line`.
@@ -16,14 +16,18 @@ function parseAttributes(attrSpan, spanOffset, line) {
     const valueStartInSpan = m.index + m[0].length - rawValue.length;
     let value = rawValue;
     let valueChar = spanOffset + valueStartInSpan;
+    let sourceValueLength;
     if (rawValue.startsWith('"') && rawValue.endsWith('"')) {
-      value = rawValue.slice(1, -1).replace(/\\(.)/g, '$1');
-      valueChar += 1; // skip opening quote
+      value = rawValue.slice(1, -1).replace(/\\(.)/g, '$1'); // unescaped, for attributes[key]
+      valueChar += 1;                                         // skip opening quote
+      sourceValueLength = rawValue.length - 2;               // raw inner length, for the range
+    } else {
+      sourceValueLength = rawValue.length;
     }
     attributes[key] = value;
     attrValueRange[key] = {
       start: { line, character: valueChar },
-      end: { line, character: valueChar + value.length },
+      end:   { line, character: valueChar + sourceValueLength },
     };
     const fullStart = spanOffset + m.index;
     attrFullRange[key] = {

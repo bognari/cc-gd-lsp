@@ -45,3 +45,22 @@ test('value range points at the attribute value text', () => {
   const headerText = '[ext_resource type="Script" path="res://player.gd" id="1_xy"]';
   assert.equal(headerText.slice(r.start.character, r.end.character), 'res://player.gd');
 });
+
+test('value range spans the raw source for escaped-quote values', () => {
+  const src = '[node name="a\\"b" type="Node2D"]\n';
+  const [node] = tokenize(src);
+  assert.equal(node.attributes.name, 'a"b'); // unescaped value stored
+  const r = node.attrValueRange.name;
+  // raw inner span is a\"b = 4 source chars
+  assert.equal(r.end.character - r.start.character, 4);
+  // and it slices the full raw value out of the source line
+  assert.equal(src.slice(r.start.character, r.end.character), 'a\\"b');
+});
+
+test('parses a header with a closing bracket inside a quoted value', () => {
+  const src = '[node name="a]b" type="Node2D"]\n';
+  const [node] = tokenize(src);
+  assert.equal(node.name, 'node');
+  assert.equal(node.attributes.name, 'a]b');
+  assert.equal(node.attributes.type, 'Node2D');
+});
