@@ -83,6 +83,11 @@ test('collects references that appear in a header attribute value', () => {
   const ref = doc.references.find((r) => r.kind === 'ext' && r.id === '1');
   assert.ok(ref, 'header-attribute ExtResource("1") should be collected');
   assert.equal(ref.range.start.line, 4);
+  const headerLine = '[node name="Root" type="Node" script=ExtResource("1")]';
+  const expectedChar = headerLine.indexOf('"1"') + 1; // position of the id digit inside the quotes
+  assert.equal(ref.range.start.character, expectedChar);
+  assert.equal(ref.range.end.character, expectedChar + 1);
+  assert.equal(headerLine.slice(ref.range.start.character, ref.range.end.character), '1');
 });
 
 test('a broken header-attribute reference is therefore flagged by validate', () => {
@@ -91,4 +96,11 @@ test('a broken header-attribute reference is therefore flagged by validate', () 
   const project = { root: '/x', fileExists: () => true, findSimilarFiles: () => [] };
   const d = validate(buildDocument(tokenize(src)), project);
   assert.ok(d.some((x) => x.code === 'undeclared-ext-ref'));
+});
+
+test('ext_resource path containing "ExtResource(" is NOT treated as a reference', () => {
+  const src = '[gd_scene format=3]\n\n[ext_resource type="Script" path="res://ExtResource(1).gd" id="1"]\n';
+  const doc = buildDocument(tokenize(src));
+  // the only thing here is the declaration itself; no inline reference should be collected
+  assert.equal(doc.references.length, 0);
 });

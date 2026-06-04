@@ -62,24 +62,31 @@ function buildDocument(sections) {
       default:
         break;
     }
-    // Scan header attribute values for inline references (Godot-3-style).
-    for (const key of Object.keys(s.attributes)) {
-      const val = s.attributes[key];
-      if (typeof val !== 'string' || val.indexOf('Resource(') === -1) continue;
-      const vr = s.attrValueRange[key];
-      if (!vr) continue;
-      REFERENCE_RE.lastIndex = 0;
-      let hm;
-      while ((hm = REFERENCE_RE.exec(val)) !== null) {
-        const idOffsetInVal = hm.indices[2][0];
-        doc.references.push({
-          kind: hm[1] === 'ExtResource' ? 'ext' : 'sub',
-          id: hm[2],
-          range: {
-            start: { line: vr.start.line, character: vr.start.character + idOffsetInVal },
-            end: { line: vr.start.line, character: vr.start.character + idOffsetInVal + hm[2].length },
-          },
-        });
+    // Inline references appear in node/connection headers (Godot-3 style), never in
+    // ext_resource/sub_resource declaration headers — skip those to avoid false positives
+    // from path/type values that merely contain the substring "Resource(".
+    if (s.name !== 'ext_resource' && s.name !== 'sub_resource') {
+      for (const key of Object.keys(s.attributes)) {
+        const val = s.attributes[key];
+        if (typeof val !== 'string' || val.indexOf('Resource(') === -1) continue;
+        const vr = s.attrValueRange[key];
+        if (!vr) continue;
+        // NOTE: vr points at the raw source value; for the unquoted Godot-3 form
+        // (script=ExtResource("1")) the offset math below is exact. Godot never
+        // emits the outer-quoted-with-escapes form, so no escape remapping is needed.
+        REFERENCE_RE.lastIndex = 0;
+        let hm;
+        while ((hm = REFERENCE_RE.exec(val)) !== null) {
+          const idOffsetInVal = hm.indices[2][0];
+          doc.references.push({
+            kind: hm[1] === 'ExtResource' ? 'ext' : 'sub',
+            id: hm[2],
+            range: {
+              start: { line: vr.start.line, character: vr.start.character + idOffsetInVal },
+              end: { line: vr.start.line, character: vr.start.character + idOffsetInVal + hm[2].length },
+            },
+          });
+        }
       }
     }
     for (const { text, line } of s.bodyLines) {
