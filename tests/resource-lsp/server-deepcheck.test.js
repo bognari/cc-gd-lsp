@@ -65,3 +65,32 @@ test('--no-deep-check disables the deep-check (static only)', async () => {
   await new Promise((r) => setTimeout(r, 100));
   assert.equal(deepCalled, false, 'deep-check must not run when --no-deep-check is set');
 });
+
+test('a file flagged by a previous deep run is cleared when the next run is clean', async () => {
+  const input = new PassThrough();
+  const output = new PassThrough();
+  const messages = [];
+  collect(output, (m) => messages.push(m));
+
+  const uri = 'file://' + path.join(PROJ, 'clearme.tscn');
+  let runNo = 0;
+  const fakeDeep = async () => {
+    runNo++;
+    if (runNo === 1) return new Map([[uri, [{ range: { start: { line: 0, character: 0 }, end: { line: 0, character: 1 } }, severity: 1, code: 'deep-parse-error', source: 'godot-resource (deep)', message: 'boom' }]]]);
+    return new Map(); // second run: clean
+  };
+  startServer(input, output, { runDeepCheck: fakeDeep, deepDebounceMs: 10, argv: [] });
+  input.write(frame({ jsonrpc: '2.0', id: 1, method: 'initialize', params: { rootUri: 'file://' + PROJ, capabilities: {} } }));
+  // a valid doc so static is empty
+  input.write(frame({ jsonrpc: '2.0', method: 'textDocument/didOpen', params: { textDocument: { uri, languageId: 'godot-resource', version: 1, text: '[gd_scene format=3]\n' } } }));
+  input.write(frame({ jsonrpc: '2.0', method: 'textDocument/didSave', params: { textDocument: { uri } } }));
+  // wait for the deep diag to appear
+  await waitFor(() => messages, (ms) => ms.some((m) => m.method === 'textDocument/publishDiagnostics' && m.params.uri === uri && m.params.diagnostics.some((d) => d.code === 'deep-parse-error')));
+  // save again -> second (clean) run -> the deep diag must be cleared
+  input.write(frame({ jsonrpc: '2.0', method: 'textDocument/didSave', params: { textDocument: { uri } } }));
+  await waitFor(() => messages, (ms) => {
+    const pubs = ms.filter((m) => m.method === 'textDocument/publishDiagnostics' && m.params.uri === uri);
+    const last = pubs[pubs.length - 1];
+    return last && !last.params.diagnostics.some((d) => d.code === 'deep-parse-error');
+  }, 4000);
+});

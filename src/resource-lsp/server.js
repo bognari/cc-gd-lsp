@@ -105,19 +105,23 @@ function startServer(input, output, options = {}) {
     const root = rootKeyFor(uri);
     if (!root) return;
     let st = deepState.get(root);
-    if (!st) { st = { running: false, pending: false, timer: null, godot: locateGodot(godotPath) }; deepState.set(root, st); }
-    if (!st.godot) return; // no Godot -> deep-check silently unavailable
+    if (!st) { st = { running: false, pending: false, timer: null, godot: undefined }; deepState.set(root, st); }
+    if (st.godot === null) return; // previously determined Godot is absent -> skip cheaply
     if (st.timer) clearTimeout(st.timer);
     st.timer = setTimeout(() => startDeepRun(root), deepDebounceMs);
   }
 
   function startDeepRun(root) {
+    if (shutdownReceived) return;
     const st = deepState.get(root);
     if (!st) return;
+    if (st.timer) { clearTimeout(st.timer); st.timer = null; }
+    if (st.godot === undefined) st.godot = locateGodot(godotPath) || null; // lazy locate off the message-handler path
+    if (!st.godot) return; // no Godot available -> deep-check silently unavailable
     if (st.running) { st.pending = true; return; }
     st.running = true;
     st.pending = false;
-    runDeepCheck(root, { godotPath: st.godot || godotPath })
+    runDeepCheck(root, { godotPath: st.godot })
       .then((map) => applyDeepResults(root, map))
       .catch((err) => process.stderr.write(`[godot-resource] deep-check error: ${err && err.stack}\n`))
       .finally(() => {
@@ -127,10 +131,8 @@ function startServer(input, output, options = {}) {
   }
 
   function applyDeepResults(root, map) {
-    const prevUris = new Set([...deepDiagnostics.keys()]);
-    for (const uri of prevUris) {
-      if (uriUnderRoot(uri, root)) deepDiagnostics.delete(uri);
-    }
+    const prevUris = new Set([...deepDiagnostics.keys()].filter((u) => uriUnderRoot(u, root)));
+    for (const uri of prevUris) deepDiagnostics.delete(uri);
     for (const [uri, diags] of map) deepDiagnostics.set(uri, diags);
     const affected = new Set([...prevUris, ...map.keys()]);
     for (const uri of affected) sendPublish(uri);
@@ -180,8 +182,7 @@ function startServer(input, output, options = {}) {
           const uri = msg.params.textDocument.uri;
           documents.delete(uri);
           staticDiagnostics.delete(uri);
-          deepDiagnostics.delete(uri);
-          conn.send({ jsonrpc: '2.0', method: 'textDocument/publishDiagnostics', params: { uri, diagnostics: [] } });
+          sendPublish(uri); // union = remaining deep diags (project-wide) or []
           return;
         }
         case 'textDocument/codeAction': {
@@ -204,6 +205,7 @@ function startServer(input, output, options = {}) {
         }
         case 'shutdown':
           shutdownReceived = true;
+          for (const st of deepState.values()) { if (st.timer) { clearTimeout(st.timer); st.timer = null; } }
           conn.send({ jsonrpc: '2.0', id: msg.id, result: null });
           return;
         case 'exit':
