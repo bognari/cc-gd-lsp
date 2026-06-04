@@ -42,7 +42,7 @@ function validate(doc, project) {
       }
       if (s.attributes.uid !== undefined && !UID_RE.test(s.attributes.uid)) {
         diags.push(mk(attrRange(s, 'uid'), SEVERITY.WARNING, 'invalid-uid',
-          `Invalid UID '${s.attributes.uid}'. Godot will ignore it and fall back to the path.`));
+          `Invalid UID '${s.attributes.uid}'. Godot only generates UIDs using [a-y0-8]; this one will not resolve and Godot falls back to the path.`));
       }
     } else if (s.name === 'sub_resource') {
       for (const req of ['type', 'id']) {
@@ -118,7 +118,7 @@ function duplicateIds(list, code, tagName, diags) {
   for (const item of list) {
     if (!item.id) continue;
     if (seen.has(item.id)) {
-      diags.push(mk(item.section.attrValueRange.id || item.section.headerRange, 2, code,
+      diags.push(mk(item.section.attrValueRange.id || item.section.headerRange, SEVERITY.WARNING, code,
         `Duplicate ${tagName} id '${item.id}'. Each id must be unique within the file.`,
         { id: item.id }));
     } else {

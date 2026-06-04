@@ -73,3 +73,14 @@ test('clean scene yields only the load_steps info diagnostic', () => {
   assert.deepEqual(d.map((x) => x.code), ['load-steps-mismatch']);
   assert.equal(d[0].severity, 3);
 });
+
+test('a valid Godot UID is NOT flagged', () => {
+  // uid://d4n4ub6itg400 is the documented max-length real Godot uid (13 chars, [a-y0-8])
+  const d = diag('[gd_scene format=3 uid="uid://d4n4ub6itg400"]\n\n[ext_resource type="Script" path="res://a.gd" uid="uid://cabc12def" id="1"]\n');
+  assert.ok(!d.some((x) => x.code === 'invalid-uid'));
+});
+
+test('uid containing 9 or z IS flagged (Godot never generates those)', () => {
+  const d = diag('[gd_scene format=3]\n\n[ext_resource type="Script" path="res://a.gd" uid="uid://abc9z" id="1"]\n');
+  assert.ok(d.some((x) => x.code === 'invalid-uid' && x.severity === 2));
+});
