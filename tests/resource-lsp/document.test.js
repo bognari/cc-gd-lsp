@@ -106,6 +106,9 @@ test('ext_resource path containing "ExtResource(" is NOT treated as a reference'
 });
 
 test('ExtResource text inside a quoted string value is NOT a reference', () => {
+  // NOTE: the escaped-quote form ExtResource(\"99\") is rejected by REFERENCE_RE itself
+  // (the id is not directly after the optional quote), so this asserts a non-regression
+  // rather than exercising isInsideQuotedString — the bare-id test below exercises the guard.
   const src = '[gd_scene format=3]\n\n[node name="R" type="Label"]\ntext = "see ExtResource(\\"99\\") in the docs"\n';
   const doc = buildDocument(tokenize(src));
   assert.equal(doc.references.length, 0);
@@ -129,4 +132,10 @@ test('the same bare-id SubResource(...) NOT inside a string is still collected',
   const doc = buildDocument(tokenize(src));
   assert.equal(doc.references.length, 1);
   assert.equal(doc.references[0].id, '99');
+});
+
+test('a quoted header string containing ExtResource text is NOT a reference', () => {
+  const src = '[gd_scene format=3]\n\n[node name="R" type="Node" hint="see ExtResource(1) here"]\n';
+  const doc = buildDocument(tokenize(src));
+  assert.equal(doc.references.length, 0);
 });

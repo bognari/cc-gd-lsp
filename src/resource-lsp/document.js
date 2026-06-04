@@ -2,6 +2,11 @@
 
 const REFERENCE_RE = /\b(ExtResource|SubResource)\(\s*"?([0-9A-Za-z_]+)"?\s*\)/gd;
 
+// A header attribute is an inline reference only when its ENTIRE value is the call,
+// e.g. script=ExtResource("1"). A quoted string value that merely contains the text
+// (e.g. hint="see ExtResource(1)") is NOT a reference.
+const HEADER_REF_RE = /^(ExtResource|SubResource)\(\s*"?([0-9A-Za-z_]+)"?\s*\)$/d;
+
 function isInsideQuotedString(text, index) {
   let inString = false;
   for (let i = 0; i < index; i++) {
@@ -84,9 +89,11 @@ function buildDocument(sections) {
         // NOTE: vr points at the raw source value; for the unquoted Godot-3 form
         // (script=ExtResource("1")) the offset math below is exact. Godot never
         // emits the outer-quoted-with-escapes form, so no escape remapping is needed.
-        REFERENCE_RE.lastIndex = 0;
-        let hm;
-        while ((hm = REFERENCE_RE.exec(val)) !== null) {
+        // The anchored regex ensures only values whose ENTIRE content is the call
+        // are treated as references — a quoted string that merely contains the text
+        // (e.g. hint="see ExtResource(1) here") is not a reference.
+        const hm = HEADER_REF_RE.exec(val);
+        if (hm) {
           const idOffsetInVal = hm.indices[2][0];
           doc.references.push({
             kind: hm[1] === 'ExtResource' ? 'ext' : 'sub',
