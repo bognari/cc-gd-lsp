@@ -1,0 +1,5 @@
+[gd_scene load_steps=2 format=3]
+
+[sub_resource type="NotARealResource" id="s1"]
+
+[node name="Root" type="Node2D"]
