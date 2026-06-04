@@ -39,3 +39,18 @@ test('deduplicates identical errors on the same line', () => {
   const map = parseGodotOutput(line + '\n' + line + '\n', ROOT);
   assert.equal(map.get('file:///proj/s.tscn').length, 1);
 });
+
+test('a SCRIPT ERROR line classifies as deep-script-error even without the word script in the message', () => {
+  const stderr = `SCRIPT ERROR: res://x.gd:2 - Expected parameter name.\n`;
+  const d = parseGodotOutput(stderr, '/proj').get('file:///proj/x.gd')[0];
+  assert.equal(d.code, 'deep-script-error');
+  assert.equal(d.severity, 1);
+});
+
+test('strips ANSI color codes before parsing', () => {
+  const stderr = `\x1b[1;31mERROR: res://s.tscn:6 - Parse Error: [ext_resource] referenced non-existent resource at: res://x.png.\x1b[0m\n`;
+  const map = parseGodotOutput(stderr, '/proj');
+  const d = map.get('file:///proj/s.tscn');
+  assert.ok(d && d.length === 1, 'ANSI-wrapped line must still parse');
+  assert.equal(d[0].code, 'deep-missing-dep');
+});
