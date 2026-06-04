@@ -18,10 +18,15 @@ test('existing ext_resource file yields no missing-file error', () => {
   assert.ok(!codes(src).includes('ext-file-missing'));
 });
 
-test('missing ext_resource file is flagged with a suggestion', () => {
+test('missing ext_resource file is flagged with a suggestion', async () => {
   const src = '[gd_scene format=3]\n\n[ext_resource type="Texture2D" path="res://art/palyer.png" id="1"]\n';
-  const d = validate(buildDocument(tokenize(src)), project);
-  const miss = d.find((x) => x.code === 'ext-file-missing');
+  let miss;
+  for (let i = 0; i < 50; i++) {
+    const d = validate(buildDocument(tokenize(src)), project);
+    miss = d.find((x) => x.code === 'ext-file-missing');
+    if (miss && miss.data.suggestions.length) break;
+    await new Promise((r) => setTimeout(r, 10));
+  }
   assert.ok(miss);
   assert.equal(miss.severity, 1);
   assert.ok(miss.data.suggestions.includes('res://art/player.png'));

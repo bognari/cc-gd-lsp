@@ -1,6 +1,7 @@
 'use strict';
 
 const fs = require('node:fs');
+const fsp = require('node:fs/promises');
 const path = require('node:path');
 const { distance } = require('./util.js');
 
@@ -24,62 +25,63 @@ function resToAbs(root, resPath) {
 }
 
 
-function listAllFiles(root) {
+async function listAllFilesAsync(root) {
   const out = [];
   const SKIP = new Set(['.godot', '.git', '.import', 'node_modules']);
-  function walk(dir) {
+  async function walk(dir) {
     let entries;
     try {
-      entries = fs.readdirSync(dir, { withFileTypes: true });
+      entries = await fsp.readdir(dir, { withFileTypes: true });
     } catch {
       return;
     }
     for (const e of entries) {
       if (e.isDirectory()) {
         if (SKIP.has(e.name)) continue;
-        walk(path.join(dir, e.name));
+        await walk(path.join(dir, e.name));
       } else if (e.isFile()) {
         const rel = path.relative(root, path.join(dir, e.name)).split(path.sep).join('/');
         out.push('res://' + rel);
       }
     }
   }
-  walk(root);
+  await walk(root);
   return out;
 }
 
 function createProject(root) {
-  let fileCache = null;
-  let cacheTime = 0;
+  let fileCache = [];
+  let warming = false;
+  let lastWarm = 0;
   const TTL_MS = 5000;
 
-  function files() {
-    if (!root) return [];
+  function warm() {
+    if (!root || warming) return;
     const now = Date.now();
-    if (!fileCache || now - cacheTime > TTL_MS) {
-      fileCache = listAllFiles(root);
-      cacheTime = now;
-    }
-    return fileCache;
+    if (fileCache.length && now - lastWarm < TTL_MS) return;
+    warming = true;
+    listAllFilesAsync(root)
+      .then((files) => { fileCache = files; lastWarm = Date.now(); })
+      .catch(() => {})
+      .finally(() => { warming = false; });
   }
+
+  if (root) warm();
 
   return {
     root,
     fileExists(resPath) {
       const abs = resToAbs(root, resPath);
       if (!abs) return false;
-      try {
-        return fs.existsSync(abs);
-      } catch {
-        return false;
-      }
+      try { return fs.existsSync(abs); } catch { return false; }
     },
     findSimilarFiles(resPath, max) {
       if (!root || typeof resPath !== 'string') return [];
+      warm();
       const targetBase = resPath.split('/').pop().toLowerCase();
       if (!targetBase) return [];
       const threshold = Math.max(2, Math.floor(targetBase.length / 3));
-      return files()
+      return fileCache
         .map((f) => ({ f, d: distance(targetBase, f.split('/').pop().toLowerCase()) }))
         .filter((x) => x.d <= threshold)
         .sort((a, b) => a.d - b.d)
