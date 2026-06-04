@@ -8,6 +8,8 @@ const { buildDocument } = require('./document.js');
 const { validate } = require('./validate.js');
 const { createProject, findProjectRoot } = require('./project.js');
 const { computeCodeActions } = require('./fixes.js');
+const { runDeepCheck: realRunDeepCheck } = require('./deepcheck.js');
+const { locateGodot } = require('./godot-locate.js');
 
 function uriToPath(uri) {
   try {
@@ -29,6 +31,16 @@ function startServer(input, output, options = {}) {
   let shutdownReceived = false;
   const projectCacheMax = options.projectCacheMax ?? 8;
   const projectCache = new Map(); // insertion order doubles as LRU order
+  const staticDiagnostics = new Map();  // uri -> Diagnostic[]
+  const deepDiagnostics = new Map();    // uri -> Diagnostic[]
+  const deepState = new Map();          // rootKey -> { running, pending, timer, godot }
+
+  const argv = options.argv || [];
+  const deepDisabled = argv.includes('--no-deep-check');
+  const deepDebounceMs = options.deepDebounceMs ?? 700;
+  const runDeepCheck = options.runDeepCheck || realRunDeepCheck;
+  const godotFlagIdx = argv.indexOf('--godot');
+  const godotPath = godotFlagIdx >= 0 ? argv[godotFlagIdx + 1] : undefined;
 
   function touchProject(root) {
     const key = root || '';
@@ -53,6 +65,15 @@ function startServer(input, output, options = {}) {
     return touchProject(root);
   }
 
+  function sendPublish(uri) {
+    const entry = documents.get(uri);
+    const stat = staticDiagnostics.get(uri) || [];
+    const deep = deepDiagnostics.get(uri) || [];
+    const params = { uri, diagnostics: [...stat, ...deep] };
+    if (entry && typeof entry.version === 'number') params.version = entry.version;
+    conn.send({ jsonrpc: '2.0', method: 'textDocument/publishDiagnostics', params });
+  }
+
   function publish(uri) {
     const entry = documents.get(uri);
     if (!entry) return;
@@ -62,9 +83,57 @@ function startServer(input, output, options = {}) {
     } catch (err) {
       process.stderr.write(`[godot-resource] validation error: ${err && err.stack}\n`);
     }
-    const params = { uri, diagnostics };
-    if (typeof entry.version === 'number') params.version = entry.version; // LSP: version must be an integer when present
-    conn.send({ jsonrpc: '2.0', method: 'textDocument/publishDiagnostics', params });
+    staticDiagnostics.set(uri, diagnostics);
+    sendPublish(uri);
+  }
+
+  function rootKeyFor(uri) {
+    const fsPath = uriToPath(uri);
+    return findProjectRoot(path.dirname(fsPath)) || workspaceRoot || '';
+  }
+
+  function uriUnderRoot(uri, root) {
+    try {
+      const p = uriToPath(uri);
+      const rel = path.relative(root, p);
+      return !rel.startsWith('..') && !path.isAbsolute(rel);
+    } catch { return false; }
+  }
+
+  function scheduleDeepCheck(uri) {
+    if (deepDisabled) return;
+    const root = rootKeyFor(uri);
+    if (!root) return;
+    let st = deepState.get(root);
+    if (!st) { st = { running: false, pending: false, timer: null, godot: locateGodot(godotPath) }; deepState.set(root, st); }
+    if (!st.godot) return; // no Godot -> deep-check silently unavailable
+    if (st.timer) clearTimeout(st.timer);
+    st.timer = setTimeout(() => startDeepRun(root), deepDebounceMs);
+  }
+
+  function startDeepRun(root) {
+    const st = deepState.get(root);
+    if (!st) return;
+    if (st.running) { st.pending = true; return; }
+    st.running = true;
+    st.pending = false;
+    runDeepCheck(root, { godotPath: st.godot || godotPath })
+      .then((map) => applyDeepResults(root, map))
+      .catch((err) => process.stderr.write(`[godot-resource] deep-check error: ${err && err.stack}\n`))
+      .finally(() => {
+        st.running = false;
+        if (st.pending) startDeepRun(root);
+      });
+  }
+
+  function applyDeepResults(root, map) {
+    const prevUris = new Set([...deepDiagnostics.keys()]);
+    for (const uri of prevUris) {
+      if (uriUnderRoot(uri, root)) deepDiagnostics.delete(uri);
+    }
+    for (const [uri, diags] of map) deepDiagnostics.set(uri, diags);
+    const affected = new Set([...prevUris, ...map.keys()]);
+    for (const uri of affected) sendPublish(uri);
   }
 
   conn.onMessage((msg) => {
@@ -104,11 +173,14 @@ function startServer(input, output, options = {}) {
             documents.set(uri, { text: msg.params.text, version: prev ? prev.version : null });
           }
           publish(uri);
+          scheduleDeepCheck(uri);
           return;
         }
         case 'textDocument/didClose': {
           const uri = msg.params.textDocument.uri;
           documents.delete(uri);
+          staticDiagnostics.delete(uri);
+          deepDiagnostics.delete(uri);
           conn.send({ jsonrpc: '2.0', method: 'textDocument/publishDiagnostics', params: { uri, diagnostics: [] } });
           return;
         }
