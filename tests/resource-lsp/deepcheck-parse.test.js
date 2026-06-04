@@ -67,3 +67,17 @@ test('an error line whose res:// path escapes the project root is ignored', () =
   const map = parseGodotOutput('ERROR: res://../../etc/passwd:1 - boom\n', '/proj');
   assert.equal(map.size, 0);
 });
+
+test('parses a res:// path containing spaces (error line)', () => {
+  const stderr = `ERROR: res://My Scene.tscn:3 - Parse Error: Can't create sub resource of type 'X'.\n`;
+  const d = parseGodotOutput(stderr, '/proj').get('file:///proj/My%20Scene.tscn');
+  assert.ok(d && d.length === 1);
+  assert.equal(d[0].range.start.line, 2);
+});
+
+test('parses a GDRESLSP_LOADFAIL marker with spaces in the path', () => {
+  const map = parseGodotOutput('GDRESLSP_LOADFAIL\tres://My Scene.tscn\n', '/proj');
+  const d = map.get('file:///proj/My%20Scene.tscn');
+  assert.ok(d && d.length === 1);
+  assert.equal(d[0].code, 'deep-load-failed');
+});

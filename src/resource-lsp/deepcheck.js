@@ -11,7 +11,9 @@ const SOURCE = 'godot-resource (deep)';
 // Godot prints e.g.:
 //   ERROR: res://foo.tscn:3 - Parse Error: Can't create sub resource of type 'X'.
 //   WARNING: res://foo.tscn:4 - ext_resource, invalid UID: ...
-const LINE_RE = /^(ERROR|WARNING|SCRIPT ERROR):\s*(res:\/\/[^\s:]+):(\d+)\s*-\s*(.*)$/;
+// Non-greedy path capture so res:// names with spaces (e.g. "res://My Scene.tscn") parse;
+// the path runs up to the first ":<line> - " separator.
+const LINE_RE = /^(ERROR|WARNING|SCRIPT ERROR):\s*(res:\/\/.+?):(\d+)\s*-\s*(.*)$/;
 
 // Fix 2: strip ANSI escape codes before parsing (CI/FORCE_COLOR/ConPTY can emit them)
 const ANSI_RE = /\x1b\[[0-9;]*m/g;
@@ -48,7 +50,7 @@ function parseGodotOutput(text, root) {
   const seen = new Set();
   for (const raw of text.split(/\r?\n/)) {
     // Fix 2 (new): consume GDRESLSP_LOADFAIL markers as file-level diagnostics
-    const lf = /^GDRESLSP_LOADFAIL\t(res:\/\/\S+)$/.exec(raw.trim());
+    const lf = /^GDRESLSP_LOADFAIL\t(res:\/\/.+)$/.exec(raw.trim());
     if (lf) {
       const uri = resToUri(lf[1], root);
       if (uri) {
