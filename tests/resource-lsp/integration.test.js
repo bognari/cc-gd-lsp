@@ -28,6 +28,19 @@ function makeCollector(onMessage) {
   };
 }
 
+// Resolves when predicate over the collected messages becomes true.
+function waitFor(getMessages, predicate, timeoutMs = 2000) {
+  return new Promise((resolve, reject) => {
+    const started = Date.now();
+    const tick = () => {
+      if (predicate(getMessages())) return resolve();
+      if (Date.now() - started > timeoutMs) return reject(new Error('timeout waiting for message'));
+      setImmediate(tick);
+    };
+    tick();
+  });
+}
+
 test('server answers initialize with capabilities', async () => {
   const srv = spawn('node', [ENTRY], { stdio: ['pipe', 'pipe', 'inherit'] });
   const messages = [];
@@ -35,13 +48,16 @@ test('server answers initialize with capabilities', async () => {
 
   srv.stdin.write(frame({ jsonrpc: '2.0', id: 1, method: 'initialize', params: { rootUri: null, capabilities: {} } }));
 
-  await new Promise((r) => setTimeout(r, 300));
+  await waitFor(() => messages, (ms) => ms.some((m) => m.id === 1));
+
   const init = messages.find((m) => m.id === 1);
   assert.ok(init, 'should receive an initialize response');
   assert.ok(init.result.capabilities.textDocumentSync);
   assert.equal(init.result.capabilities.codeActionProvider, true);
 
   srv.stdin.write(frame({ jsonrpc: '2.0', method: 'exit' }));
-  await new Promise((r) => setTimeout(r, 100));
+
+  // Wait for process to exit rather than using a fixed sleep
+  await new Promise((resolve) => srv.on('close', resolve));
   srv.kill();
 });

@@ -51,3 +51,46 @@ test('handles two messages arriving in one chunk', async () => {
   await new Promise((r) => setImmediate(r));
   assert.deepEqual(received.map((m) => m.method), ['a', 'b']);
 });
+
+test('reassembles a frame split across two writes', async () => {
+  const input = new PassThrough();
+  const output = new PassThrough();
+  const conn = createConnection(input, output);
+  const received = [];
+  conn.onMessage((m) => received.push(m));
+
+  const body = JSON.stringify({ jsonrpc: '2.0', id: 7, method: 'split' });
+  const framed = `Content-Length: ${Buffer.byteLength(body)}\r\n\r\n${body}`;
+  const cut = framed.length - 5;
+  input.write(framed.slice(0, cut));
+  await new Promise((r) => setImmediate(r));
+  assert.equal(received.length, 0);
+  input.write(framed.slice(cut));
+  await new Promise((r) => setImmediate(r));
+  assert.equal(received.length, 1);
+  assert.equal(received[0].id, 7);
+});
+
+test('missing Content-Length header causes input stream to be destroyed', async () => {
+  const input = new PassThrough();
+  const output = new PassThrough();
+  const conn = createConnection(input, output);
+  const received = [];
+  conn.onMessage((m) => received.push(m));
+
+  let destroyed = false;
+  input.on('error', () => { destroyed = true; });
+  input.on('close', () => { destroyed = true; });
+
+  // Write a frame with no Content-Length header
+  input.write('X-Custom-Header: 5\r\n\r\nhello');
+  await new Promise((r) => setImmediate(r));
+
+  assert.ok(destroyed, 'input stream should be destroyed on missing Content-Length');
+
+  // A subsequent valid frame should NOT be delivered after fatal error
+  const validBody = JSON.stringify({ jsonrpc: '2.0', id: 99, method: 'after-error' });
+  input.write(`Content-Length: ${Buffer.byteLength(validBody)}\r\n\r\n${validBody}`);
+  await new Promise((r) => setImmediate(r));
+  assert.equal(received.length, 0, 'no messages should arrive after fatal framing error');
+});
