@@ -58,7 +58,7 @@ function createProject(root) {
   function warm() {
     if (!root || warming) return;
     const now = Date.now();
-    if (fileCache.length && now - lastWarm < TTL_MS) return;
+    if (lastWarm > 0 && now - lastWarm < TTL_MS) return; // TTL applies after any completed walk, even an empty one
     warming = true;
     listAllFilesAsync(root)
       .then((files) => { fileCache = files; lastWarm = Date.now(); })
